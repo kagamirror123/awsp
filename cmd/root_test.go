@@ -54,6 +54,19 @@ func TestEnsureKnownProfile(t *testing.T) {
 	})
 }
 
+func TestRenderZshInitScript(t *testing.T) {
+	t.Run("フラグ指定を profile と誤解釈しない", func(t *testing.T) {
+		script := renderZshInitScript("/usr/local/bin/awsp")
+
+		if !strings.Contains(script, `if [[ "$1" == -* ]]; then`) {
+			t.Fatalf("フラグ素通しの分岐が存在しない")
+		}
+		if !strings.Contains(script, `current|list|completion|help|init`) {
+			t.Fatalf("サブコマンド素通しの分岐が存在しない")
+		}
+	})
+}
+
 func setHomeWithAWSConfig(t *testing.T, content string) {
 	t.Helper()
 

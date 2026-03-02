@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"unicode"
 
@@ -20,11 +22,28 @@ const UnsetOption = "(unset)"
 
 // Selector はインタラクティブなプロファイル選択を提供する
 // 左に一覧 右に詳細を表示する
-type Selector struct{}
+type Selector struct {
+	input  io.Reader
+	output io.Writer
+}
 
 // NewSelector は Selector を作る
 func NewSelector() *Selector {
-	return &Selector{}
+	return NewSelectorWithIO(os.Stdin, os.Stdout)
+}
+
+// NewSelectorWithIO は入出力を指定して Selector を作る
+func NewSelectorWithIO(input io.Reader, output io.Writer) *Selector {
+	if input == nil {
+		input = os.Stdin
+	}
+	if output == nil {
+		output = os.Stdout
+	}
+	return &Selector{
+		input:  input,
+		output: output,
+	}
 }
 
 // Select は候補を表示して 1 つ選択する
@@ -36,7 +55,13 @@ func (s *Selector) Select(ctx context.Context, profiles []awsp.Profile) (string,
 	}
 
 	model := newSelectModel(items)
-	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithContext(ctx))
+	program := tea.NewProgram(
+		model,
+		tea.WithAltScreen(),
+		tea.WithContext(ctx),
+		tea.WithInput(s.input),
+		tea.WithOutput(s.output),
+	)
 	result, err := program.Run()
 	if err != nil {
 		if errors.Is(err, context.Canceled) {

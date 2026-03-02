@@ -62,8 +62,19 @@ func newRootCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			selector := prompt.NewSelector()
-			awsClient := awscli.NewClient(logger, cmd.OutOrStdout(), cmd.ErrOrStderr())
+
+			selectorOutput := cmd.OutOrStdout()
+			awsStdout := cmd.OutOrStdout()
+			awsStderr := cmd.ErrOrStderr()
+			if opts.shell {
+				// --shell では stdout が export 出力専用になるため
+				// 対話UIと aws sso login の表示は stderr 側へ出す
+				selectorOutput = cmd.ErrOrStderr()
+				awsStdout = cmd.ErrOrStderr()
+			}
+
+			selector := prompt.NewSelectorWithIO(os.Stdin, selectorOutput)
+			awsClient := awscli.NewClient(logger, awsStdout, awsStderr)
 
 			runner := awsp.NewRunner(awsp.RunnerOptions{
 				Logger:   logger,
@@ -133,7 +144,7 @@ func newCurrentCmd(opts *rootOptions) *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			logger := newLogger(opts.verbose, cmd.ErrOrStderr())
-			awsClient := awscli.NewClient(logger, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			awsClient := awscli.NewClient(logger, cmd.ErrOrStderr(), cmd.ErrOrStderr())
 
 			profile, source, err := resolveCurrentProfile()
 			if err != nil {
@@ -144,7 +155,35 @@ func newCurrentCmd(opts *rootOptions) *cobra.Command {
 			}
 			identity, err := awsClient.CallerIdentity(cmd.Context(), profile)
 			if err != nil {
-				return fmt.Errorf("現在の identity を取得できません: %w", err)
+				if !awscli.IsAuthRelatedError(err) {
+					return fmt.Errorf("現在の identity を取得できません: %w", err)
+				}
+
+				configureColorOutput(cmd.ErrOrStderr())
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr())
+				_, _ = fmt.Fprintln(
+					cmd.ErrOrStderr(),
+					pterm.NewStyle(pterm.FgLightYellow, pterm.Bold).Sprint("⚠️ SSO ログインが必要です"),
+				)
+				_, _ = fmt.Fprintln(
+					cmd.ErrOrStderr(),
+					pterm.NewStyle(pterm.FgLightBlue).Sprint("ℹ️ ブラウザ認証を開始します"),
+				)
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr())
+
+				ssoSession, sessionErr := awsClient.SSOSession(cmd.Context(), profile)
+				if sessionErr != nil && logger != nil {
+					logger.Debug("sso_session の取得に失敗", "error", sessionErr)
+				}
+
+				if err := awsClient.Login(cmd.Context(), profile, ssoSession); err != nil {
+					return fmt.Errorf("現在の identity を取得できません: %w", err)
+				}
+
+				identity, err = awsClient.CallerIdentity(cmd.Context(), profile)
+				if err != nil {
+					return fmt.Errorf("現在の identity を取得できません: %w", err)
+				}
 			}
 
 			if jsonOutput {
@@ -518,11 +557,16 @@ awsp() {
   done
 
   case "$1" in
-    current|list|completion|help|init|-h|--help)
+    current|list|completion|help|init)
       "$_awsp_bin" "$@"
       return $?
       ;;
   esac
+
+  if [[ "$1" == -* ]]; then
+    "$_awsp_bin" "$@"
+    return $?
+  fi
 
   local _awsp_exports
   _awsp_exports="$("$_awsp_bin" "$@" --shell)"
