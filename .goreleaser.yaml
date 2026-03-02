@@ -1,0 +1,60 @@
+version: 2
+
+project_name: awsp
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+    - go vet ./...
+
+builds:
+  - id: awsp
+    binary: awsp
+    main: ./main.go
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: package
+    ids:
+      - awsp
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+  - id: raw
+    ids:
+      - awsp
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - binary
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: kagamirror123
+    name: awsp
+  prerelease: auto
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

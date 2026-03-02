@@ -1,0 +1,141 @@
+version: '3'
+
+set:
+  - errexit
+  - nounset
+  - pipefail
+
+vars:
+  GOFUMPT_VERSION: v0.9.2
+  GOIMPORTS_VERSION: v0.42.0
+  GOLANGCI_LINT_VERSION: v2.10.1
+
+  HAS_MISE:
+    sh: command -v mise >/dev/null 2>&1 && echo "1" || echo "0"
+
+  EXEC_PREFIX: '{{if eq .HAS_MISE "1"}}mise exec -- {{end}}'
+  GO_CMD: '{{.EXEC_PREFIX}}go'
+  GOFUMPT_CMD: '{{.EXEC_PREFIX}}gofumpt'
+  GOIMPORTS_CMD: '{{.EXEC_PREFIX}}goimports'
+  GOLANGCI_CMD: '{{.EXEC_PREFIX}}golangci-lint'
+  GORELEASER_CMD: '{{.EXEC_PREFIX}}goreleaser'
+
+tasks:
+  default:
+    desc: タスク一覧を表示
+    cmds:
+      - task --list-all
+
+  doctor:
+    desc: 使用ツールとバージョンを確認
+    cmds:
+      - '{{.GO_CMD}} version'
+      - '{{.GOFUMPT_CMD}} --version || true'
+      - '{{.GOIMPORTS_CMD}} </dev/null >/dev/null 2>&1 && echo "goimports ready" || true'
+      - '{{.GOLANGCI_CMD}} version || true'
+      - '{{.GORELEASER_CMD}} --version || true'
+
+  tools:
+    desc: 開発ツールをインストール
+    status:
+      - '{{.GOFUMPT_CMD}} --version >/dev/null 2>&1'
+      - '{{.GOIMPORTS_CMD}} </dev/null >/dev/null 2>&1'
+      - '{{.GOLANGCI_CMD}} version >/dev/null 2>&1'
+      - '{{.GORELEASER_CMD}} --version >/dev/null 2>&1'
+    cmds:
+      - '{{.GO_CMD}} install mvdan.cc/gofumpt@{{.GOFUMPT_VERSION}}'
+      - '{{.GO_CMD}} install golang.org/x/tools/cmd/goimports@{{.GOIMPORTS_VERSION}}'
+      - '{{.GO_CMD}} install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}}'
+      - '{{.GO_CMD}} install github.com/goreleaser/goreleaser/v2@latest'
+
+  tidy:
+    desc: 依存を整理
+    cmds:
+      - '{{.GO_CMD}} mod tidy'
+
+  fmt:
+    desc: gofumpt と goimports で整形
+    aliases:
+      - format
+    preconditions:
+      - sh: '{{.GOFUMPT_CMD}} --version >/dev/null 2>&1'
+        msg: 'gofumpt が見つかりません: `task tools` を実行してください'
+      - sh: '{{.GOIMPORTS_CMD}} </dev/null >/dev/null 2>&1'
+        msg: 'goimports が見つかりません: `task tools` を実行してください'
+    cmds:
+      - find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 {{.GOFUMPT_CMD}} -w
+      - find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 {{.GOIMPORTS_CMD}} -w
+
+  fmt-check:
+    desc: 整形差分を確認
+    preconditions:
+      - sh: '{{.GOFUMPT_CMD}} --version >/dev/null 2>&1'
+        msg: 'gofumpt が見つかりません: `task tools` を実行してください'
+      - sh: '{{.GOIMPORTS_CMD}} </dev/null >/dev/null 2>&1'
+        msg: 'goimports が見つかりません: `task tools` を実行してください'
+    cmds:
+      - test -z "$(find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 {{.GOFUMPT_CMD}} -l)"
+      - test -z "$(find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 {{.GOIMPORTS_CMD}} -l)"
+
+  vet:
+    desc: go vet を実行
+    cmds:
+      - '{{.GO_CMD}} vet ./...'
+
+  lint:
+    desc: golangci-lint を実行
+    preconditions:
+      - sh: '{{.GOLANGCI_CMD}} version >/dev/null 2>&1'
+        msg: 'golangci-lint が見つかりません: `task tools` を実行してください'
+    cmds:
+      - '{{.GOLANGCI_CMD}} run ./...'
+
+  test:
+    desc: テストを実行
+    cmds:
+      - '{{.GO_CMD}} test ./...'
+
+  build:
+    desc: バイナリをビルド
+    sources:
+      - cmd/**/*.go
+      - internal/**/*.go
+      - main.go
+      - go.mod
+      - go.sum
+    generates:
+      - bin/awsp
+    cmds:
+      - mkdir -p bin
+      - '{{.GO_CMD}} build -o ./bin/awsp ./main.go'
+
+  run:
+    desc: awsp を実行
+    cmds:
+      - '{{.GO_CMD}} run ./ {{.CLI_ARGS}}'
+
+  check:
+    desc: CI 相当の検証を実行
+    aliases:
+      - ci
+    cmds:
+      - task: fmt-check
+      - task: vet
+      - task: lint
+      - task: test
+
+  release-check:
+    desc: GoReleaser 設定を検証
+    preconditions:
+      - sh: '{{.GORELEASER_CMD}} --version >/dev/null 2>&1'
+        msg: 'goreleaser が見つかりません: `task tools` を実行してください'
+    cmds:
+      - '{{.GORELEASER_CMD}} check'
+
+  release-snapshot:
+    desc: 公開せずにリリース成果物を生成
+    preconditions:
+      - sh: '{{.GORELEASER_CMD}} --version >/dev/null 2>&1'
+        msg: 'goreleaser が見つかりません: `task tools` を実行してください'
+    cmds:
+      - '{{.GORELEASER_CMD}} release --clean --snapshot --skip=publish'
