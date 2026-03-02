@@ -61,7 +61,7 @@ func TestRenderZshInitScript(t *testing.T) {
 		if !strings.Contains(script, `if [[ "$1" == -* ]]; then`) {
 			t.Fatalf("フラグ素通しの分岐が存在しない")
 		}
-		if !strings.Contains(script, `current|list|completion|help|init`) {
+		if !strings.Contains(script, `current|list|completion|help|init|version`) {
 			t.Fatalf("サブコマンド素通しの分岐が存在しない")
 		}
 	})

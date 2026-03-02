@@ -50,7 +50,8 @@ func newRootCmd() *cobra.Command {
 		Use:           "awsp [profile]",
 		Short:         "AWS プロファイルを選択して接続する CLI",
 		Long:          "AWS プロファイルを選択して接続確認まで行う CLI",
-		Example:       "  awsp\n  awsp dev\n  awsp --login-only\n  awsp current\n  awsp list\n  awsp init zsh",
+		Version:       versionLine(),
+		Example:       "  awsp\n  awsp dev\n  awsp --version\n  awsp --login-only\n  awsp current\n  awsp list\n  awsp init zsh",
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -123,8 +124,10 @@ func newRootCmd() *cobra.Command {
 	)
 	cmd.SetHelpTemplate(helpTemplate())
 	cmd.SetUsageTemplate(usageTemplate())
+	cmd.SetVersionTemplate("{{printf \"%s\\n\" .Version}}")
 
 	cmd.CompletionOptions.DisableDefaultCmd = true
+	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newCurrentCmd(opts))
 	cmd.AddCommand(newListCmd())
 	cmd.AddCommand(newCompletionCmd(cmd))
@@ -206,6 +209,19 @@ func newCurrentCmd(opts *rootOptions) *cobra.Command {
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON 形式で出力")
 	return cmd
+}
+
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:          "version",
+		Short:        "バージョン情報を表示",
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), versionDetail())
+			return err
+		},
+	}
 }
 
 func newListCmd() *cobra.Command {
@@ -557,7 +573,7 @@ awsp() {
   done
 
   case "$1" in
-    current|list|completion|help|init)
+    current|list|completion|help|init|version)
       "$_awsp_bin" "$@"
       return $?
       ;;
