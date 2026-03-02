@@ -220,54 +220,68 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch typed.String() {
-		case "ctrl+c", "q":
-			m.aborted = true
-			return m, tea.Quit
-		}
-
-		// フィルタ中に移動キーが押されたら入力モードを抜けて移動へ渡す
-		// これで「絞り込み後に矢印が効かない」状態を避ける
-		if m.list.SettingFilter() && isNavigationKey(typed) {
-			m.list.SetFilterState(list.FilterApplied)
-			switch typed.String() {
-			case "up":
-				m.list.CursorUp()
-			case "down":
-				m.list.CursorDown()
-			}
-			return m, nil
-		}
-
-		// 文字入力を検知したら即フィルタ入力へ入る
-		// `/` を押さなくても絞り込みできるようにする
-		if shouldStartFiltering(typed, m.list.SettingFilter()) {
-			var cmds []tea.Cmd
-			var cmd tea.Cmd
-			m.list, cmd = m.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			m.list, cmd = m.list.Update(typed)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-
-		if typed.String() == "enter" && !m.list.SettingFilter() {
-			selected, ok := currentProfile(m.list.SelectedItem())
-			if !ok {
-				return m, nil
-			}
-			m.selected = selected.Name
-			return m, tea.Quit
+		if cmd, handled := m.handleKeyInput(typed); handled {
+			return m, cmd
 		}
 	}
 
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	return m, cmd
+}
+
+func (m *selectModel) handleKeyInput(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if isQuitKey(msg) {
+		m.aborted = true
+		return tea.Quit, true
+	}
+
+	// フィルタ中に移動キーが押されたら入力モードを抜けて移動へ渡す
+	// これで「絞り込み後に矢印が効かない」状態を避ける
+	if m.list.SettingFilter() && isNavigationKey(msg) {
+		m.list.SetFilterState(list.FilterApplied)
+		switch msg.String() {
+		case "up":
+			m.list.CursorUp()
+		case "down":
+			m.list.CursorDown()
+		}
+		return nil, true
+	}
+
+	// 文字入力を検知したら即フィルタ入力へ入る
+	// `/` を押さなくても絞り込みできるようにする
+	if shouldStartFiltering(msg, m.list.SettingFilter()) {
+		return m.startFiltering(msg), true
+	}
+
+	if msg.String() == "enter" && !m.list.SettingFilter() {
+		selected, ok := currentProfile(m.list.SelectedItem())
+		if !ok {
+			return nil, true
+		}
+		m.selected = selected.Name
+		return tea.Quit, true
+	}
+
+	return nil, false
+}
+
+func (m *selectModel) startFiltering(msg tea.KeyMsg) tea.Cmd {
+	var cmds []tea.Cmd
+	var cmd tea.Cmd
+
+	m.list, cmd = m.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
+	m.list, cmd = m.list.Update(msg)
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
+	return tea.Batch(cmds...)
 }
 
 func (m selectModel) View() string {
@@ -423,6 +437,15 @@ func shouldStartFiltering(msg tea.KeyMsg, filtering bool) bool {
 func isNavigationKey(msg tea.KeyMsg) bool {
 	switch msg.String() {
 	case "up", "down":
+		return true
+	default:
+		return false
+	}
+}
+
+func isQuitKey(msg tea.KeyMsg) bool {
+	switch msg.String() {
+	case "ctrl+c", "q":
 		return true
 	default:
 		return false
