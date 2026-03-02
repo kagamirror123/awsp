@@ -159,6 +159,10 @@ func newSelectModel(items []list.Item) selectModel {
 	listModel.Styles.Title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220"))
 	listModel.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 1)
 	listModel.Styles.NoItems = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Padding(1, 1)
+	listModel.KeyMap.CursorUp.SetKeys("up")
+	listModel.KeyMap.CursorUp.SetHelp("↑", "up")
+	listModel.KeyMap.CursorDown.SetKeys("down")
+	listModel.KeyMap.CursorDown.SetHelp("↓", "down")
 
 	model := selectModel{
 		list:   listModel,
@@ -227,9 +231,9 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.list.SettingFilter() && isNavigationKey(typed) {
 			m.list.SetFilterState(list.FilterApplied)
 			switch typed.String() {
-			case "up", "k":
+			case "up":
 				m.list.CursorUp()
-			case "down", "j":
+			case "down":
 				m.list.CursorDown()
 			}
 			return m, nil
@@ -268,7 +272,7 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m selectModel) View() string {
 	size := resolvePaneSize(m.width, m.height)
-	help := helpStyle.Render("↑↓/j/k: move  Enter: select  type or /: filter  Esc: clear  q: quit")
+	help := helpStyle.Render("↑↓: move  Enter: select  type or /: filter  Esc: clear  q: quit")
 	left := panelStyle.
 		Width(size.leftWidth).
 		Height(size.bodyHeight).
@@ -402,7 +406,7 @@ func shouldStartFiltering(msg tea.KeyMsg, filtering bool) bool {
 
 	if len(msg.Runes) == 1 {
 		switch msg.String() {
-		case "j", "k", "g", "G", "q", "/":
+		case "g", "G", "q", "/":
 			return false
 		}
 	}
@@ -418,7 +422,7 @@ func shouldStartFiltering(msg tea.KeyMsg, filtering bool) bool {
 
 func isNavigationKey(msg tea.KeyMsg) bool {
 	switch msg.String() {
-	case "up", "down", "j", "k":
+	case "up", "down":
 		return true
 	default:
 		return false
