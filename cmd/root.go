@@ -156,37 +156,9 @@ func newCurrentCmd(opts *rootOptions) *cobra.Command {
 			if err := ensureKnownProfile(cmd.Context(), profile, source); err != nil {
 				return err
 			}
-			identity, err := awsClient.CallerIdentity(cmd.Context(), profile)
+			identity, err := fetchCurrentIdentity(cmd.Context(), logger, awsClient, profile, cmd.ErrOrStderr())
 			if err != nil {
-				if !awscli.IsAuthRelatedError(err) {
-					return fmt.Errorf("現在の identity を取得できません: %w", err)
-				}
-
-				configureColorOutput(cmd.ErrOrStderr())
-				_, _ = fmt.Fprintln(cmd.ErrOrStderr())
-				_, _ = fmt.Fprintln(
-					cmd.ErrOrStderr(),
-					pterm.NewStyle(pterm.FgLightYellow, pterm.Bold).Sprint("⚠️ SSO ログインが必要です"),
-				)
-				_, _ = fmt.Fprintln(
-					cmd.ErrOrStderr(),
-					pterm.NewStyle(pterm.FgLightBlue).Sprint("ℹ️ ブラウザ認証を開始します"),
-				)
-				_, _ = fmt.Fprintln(cmd.ErrOrStderr())
-
-				ssoSession, sessionErr := awsClient.SSOSession(cmd.Context(), profile)
-				if sessionErr != nil && logger != nil {
-					logger.Debug("sso_session の取得に失敗", "error", sessionErr)
-				}
-
-				if err := awsClient.Login(cmd.Context(), profile, ssoSession); err != nil {
-					return fmt.Errorf("現在の identity を取得できません: %w", err)
-				}
-
-				identity, err = awsClient.CallerIdentity(cmd.Context(), profile)
-				if err != nil {
-					return fmt.Errorf("現在の identity を取得できません: %w", err)
-				}
+				return fmt.Errorf("現在の identity を取得できません: %w", err)
 			}
 
 			if jsonOutput {
@@ -209,6 +181,55 @@ func newCurrentCmd(opts *rootOptions) *cobra.Command {
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON 形式で出力")
 	return cmd
+}
+
+type currentIdentityClient interface {
+	CallerIdentity(ctx context.Context, profile string) (awscli.Identity, error)
+	SSOSession(ctx context.Context, profile string) (string, error)
+	Login(ctx context.Context, profile string, ssoSession string) error
+}
+
+func fetchCurrentIdentity(
+	ctx context.Context,
+	logger *slog.Logger,
+	awsClient currentIdentityClient,
+	profile string,
+	stderr io.Writer,
+) (awscli.Identity, error) {
+	identity, err := awsClient.CallerIdentity(ctx, profile)
+	if err == nil {
+		return identity, nil
+	}
+	if !awscli.IsAuthRelatedError(err) {
+		return awscli.Identity{}, err
+	}
+
+	configureColorOutput(stderr)
+	_, _ = fmt.Fprintln(stderr)
+	_, _ = fmt.Fprintln(
+		stderr,
+		pterm.NewStyle(pterm.FgLightYellow, pterm.Bold).Sprint("⚠️ SSO ログインが必要です"),
+	)
+	_, _ = fmt.Fprintln(
+		stderr,
+		pterm.NewStyle(pterm.FgLightBlue).Sprint("ℹ️ ブラウザ認証を開始します"),
+	)
+	_, _ = fmt.Fprintln(stderr)
+
+	ssoSession, sessionErr := awsClient.SSOSession(ctx, profile)
+	if sessionErr != nil && logger != nil {
+		logger.Debug("sso_session の取得に失敗", "error", sessionErr)
+	}
+
+	if err := awsClient.Login(ctx, profile, ssoSession); err != nil {
+		return awscli.Identity{}, err
+	}
+
+	identity, err = awsClient.CallerIdentity(ctx, profile)
+	if err != nil {
+		return awscli.Identity{}, err
+	}
+	return identity, nil
 }
 
 func newVersionCmd() *cobra.Command {
