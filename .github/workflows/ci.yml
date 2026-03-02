@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install tools
+        run: |
+          go install mvdan.cc/gofumpt@v0.9.2
+          go install golang.org/x/tools/cmd/goimports@v0.42.0
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.10.1
+
+      - name: Verify formatting
+        run: |
+          test -z "$(find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 gofumpt -l)"
+          test -z "$(find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 goimports -l)"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Lint
+        run: golangci-lint run ./...
+
+      - name: Test
+        run: go test ./...

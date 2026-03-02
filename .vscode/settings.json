@@ -1,0 +1,33 @@
+{
+  // Go 言語サーバーを有効化
+  "go.useLanguageServer": true,
+  // mise で固定した Go を VSCode から確実に使う
+  "go.goroot": "${env:HOME}/.local/share/mise/installs/go/1.26.0",
+  "go.alternateTools": {
+    "go": "${env:HOME}/.local/share/mise/installs/go/1.26.0/bin/go"
+  },
+  // gopls / go ツール実行時の環境変数
+  // PATH 先頭に固定 Go と mise shims を入れる
+  "go.toolsEnvVars": {
+    "GOROOT": "${env:HOME}/.local/share/mise/installs/go/1.26.0",
+    "PATH": "${env:HOME}/.local/share/mise/installs/go/1.26.0/bin:${env:HOME}/.local/share/mise/shims:${env:PATH}"
+  },
+  // 保存時フォーマット設定
+  "editor.formatOnSave": true,
+  "[go]": {
+    "editor.defaultFormatter": "golang.go"
+  },
+  "gopls": {
+    "formatting.gofumpt": true,
+    "ui.diagnostic.staticcheck": true
+  },
+  // 保存時の静的解析とテスト
+  "go.lintTool": "golangci-lint",
+  "go.lintFlags": [
+    "run",
+    "./..."
+  ],
+  "go.lintOnSave": "package",
+  "go.testOnSave": true,
+  "snyk.advanced.autoSelectOrganization": true,
+}
