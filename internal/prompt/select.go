@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -15,6 +16,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kagamirror123/awsp/internal/awsp"
 	"github.com/mattn/go-runewidth"
+	"github.com/muesli/termenv"
 )
 
 // UnsetOption は環境変数解除を表す擬似プロファイル
@@ -34,6 +36,8 @@ func NewSelector() *Selector {
 
 // NewSelectorWithIO は入出力を指定して Selector を作る
 func NewSelectorWithIO(input io.Reader, output io.Writer) *Selector {
+	selectorColorOnce.Do(configureSelectorColorProfile)
+
 	if input == nil {
 		input = os.Stdin
 	}
@@ -44,6 +48,21 @@ func NewSelectorWithIO(input io.Reader, output io.Writer) *Selector {
 		input:  input,
 		output: output,
 	}
+}
+
+func configureSelectorColorProfile() {
+	if os.Getenv("NO_COLOR") != "" {
+		lipgloss.SetColorProfile(termenv.Ascii)
+		return
+	}
+
+	// 端末差で色が消えるケースを避けるため
+	// 対話画面は ANSI256 以上を明示する
+	if strings.TrimSpace(os.Getenv("COLORTERM")) != "" {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+		return
+	}
+	lipgloss.SetColorProfile(termenv.ANSI256)
 }
 
 // Select は候補を表示して 1 つ選択する
@@ -123,20 +142,7 @@ type selectModel struct {
 }
 
 func newSelectModel(items []list.Item) selectModel {
-	delegate := list.NewDefaultDelegate()
-	delegate.SetSpacing(0)
-	delegate.SetHeight(1)
-	delegate.ShowDescription = false
-	delegate.Styles.SelectedTitle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("230")).
-		Background(lipgloss.Color("63")).
-		Padding(0, 1)
-	delegate.Styles.NormalTitle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252")).
-		Padding(0, 1)
-
-	listModel := list.New(items, delegate, 0, 0)
+	listModel := list.New(items, newProfileDelegate(), 0, 0)
 	listModel.Title = "🧭 Profiles"
 	listModel.SetShowTitle(true)
 	listModel.SetShowStatusBar(false)
@@ -161,6 +167,42 @@ func newSelectModel(items []list.Item) selectModel {
 	}
 	model.applyLayout(120, 30)
 	return model
+}
+
+type profileDelegate struct{}
+
+func newProfileDelegate() profileDelegate {
+	return profileDelegate{}
+}
+
+func (d profileDelegate) Height() int {
+	return 1
+}
+
+func (d profileDelegate) Spacing() int {
+	return 0
+}
+
+func (d profileDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd {
+	return nil
+}
+
+func (d profileDelegate) Render(writer io.Writer, model list.Model, index int, item list.Item) {
+	profile, ok := item.(profileItem)
+	if !ok {
+		return
+	}
+
+	isSelected := index == model.Index()
+	marker := "  "
+	lineStyle := listItemNormalStyle
+	if isSelected {
+		marker = "▶ "
+		lineStyle = listItemSelectedStyle
+	}
+
+	line := marker + profile.Title()
+	_, _ = fmt.Fprint(writer, lineStyle.Render(line))
 }
 
 func (m selectModel) Init() tea.Cmd {
@@ -402,10 +444,22 @@ func maxInt(a int, b int) int {
 }
 
 var (
-	titleStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	helpStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	panelStyle       = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("63")).Padding(0, 1)
+	titleStyle          = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	helpStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	panelStyle          = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("63")).Padding(0, 1)
+	listItemNormalStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("252")).
+				Padding(0, 1)
+	listItemSelectedStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("16")).
+				Background(lipgloss.Color("220")).
+				Border(lipgloss.NormalBorder(), false, false, false, true).
+				BorderForeground(lipgloss.Color("214")).
+				Padding(0, 1)
 	detailTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220"))
 	detailKeyStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("109")).Bold(true)
 	detailMutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+
+	selectorColorOnce sync.Once
 )
