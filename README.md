@@ -38,7 +38,8 @@ GitHub Releases のバイナリだけで使い始められます
     - 例: macOS arm64 の生バイナリ
 
     ```bash
-    curl -fL -o /tmp/awsp https://github.com/kagamirror123/awsp/releases/download/v0.2.0/awsp_0.2.0_darwin_arm64
+    AWSP_VERSION=0.6.0
+    curl -fL -o /tmp/awsp "https://github.com/kagamirror123/awsp/releases/download/v${AWSP_VERSION}/awsp_${AWSP_VERSION}_darwin_arm64"
     ```
 
 2. PATH に配置

@@ -30,16 +30,16 @@ func TestShouldStartFiltering(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "j は移動キーとして扱う",
+			name: "j は通常文字としてフィルタ開始",
 			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")},
 			mode: false,
-			want: false,
+			want: true,
 		},
 		{
-			name: "k は移動キーとして扱う",
+			name: "k は通常文字としてフィルタ開始",
 			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")},
 			mode: false,
-			want: false,
+			want: true,
 		},
 		{
 			name: "q は終了キーとして扱う",
@@ -98,9 +98,9 @@ func TestIsNavigationKey(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "j は移動キー",
+			name: "j は移動キーではない",
 			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")},
-			want: true,
+			want: false,
 		},
 		{
 			name: "通常文字は移動キーではない",
