@@ -139,3 +139,15 @@ tasks:
         msg: 'goreleaser が見つかりません: `task tools` を実行してください'
     cmds:
       - '{{.GORELEASER_CMD}} release --clean --snapshot --skip=publish'
+
+  release-tag:
+    desc: VERSION を使ってアノテーションタグを作成して push
+    summary: |
+      使い方
+        task release-tag VERSION=v0.2.0
+    requires:
+      vars:
+        - VERSION
+    cmds:
+      - git tag -a {{.VERSION}} -m "Release {{.VERSION}}"
+      - git push origin {{.VERSION}}
