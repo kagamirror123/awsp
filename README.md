@@ -102,6 +102,9 @@ awsp list --json
 # 補完とシェル連携
 awsp completion zsh
 awsp init zsh
+
+# nwrelay 経由でシェル連携する場合
+eval "$(awsp init zsh --command 'NWRELAY_TARGET_BIN=awsp command nwrelay')"
 ```
 
 <details>
@@ -111,6 +114,8 @@ awsp init zsh
 `--no-login`: caller identity / sso login を省略して反映処理のみ実施
 
 `--shell`: `awsp init zsh` が内部利用する export / unset 出力モード
+
+`init zsh --command`: 連携関数内で実行する awsp コマンドを差し替える
 
 </details>
 

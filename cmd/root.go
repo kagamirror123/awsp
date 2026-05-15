@@ -360,7 +360,9 @@ Additional Commands{{range .Commands}}{{if (and (eq .GroupID "") (or .IsAvailabl
 }
 
 func newInitZshCmd() *cobra.Command {
-	return &cobra.Command{
+	var awspCommand string
+
+	cmd := &cobra.Command{
 		Use:                   "zsh",
 		Short:                 "zsh 用の awsp 連携関数を出力",
 		Args:                  cobra.NoArgs,
@@ -372,11 +374,17 @@ func newInitZshCmd() *cobra.Command {
 			if err == nil && exePath != "" {
 				awspPath = exePath
 			}
+			if strings.TrimSpace(awspCommand) == "" {
+				awspCommand = strconv.Quote(awspPath)
+			}
 
-			_, err = io.WriteString(cmd.OutOrStdout(), renderZshInitScript(awspPath))
+			_, err = io.WriteString(cmd.OutOrStdout(), renderZshInitScript(awspCommand))
 			return err
 		},
 	}
+
+	cmd.Flags().StringVar(&awspCommand, "command", "", "連携関数内で実行する awsp コマンド")
+	return cmd
 }
 
 func newProfileStore() (*awsconfig.ProfileStore, error) {
@@ -579,34 +587,31 @@ func dashIfEmpty(value string) string {
 	return value
 }
 
-func renderZshInitScript(awspPath string) string {
-	escapedPath := strconv.Quote(awspPath)
-
+func renderZshInitScript(awspCommand string) string {
 	return fmt.Sprintf(`# awsp zsh integration
 awsp() {
-  local _awsp_bin=%s
   local _arg
   for _arg in "$@"; do
     if [[ "$_arg" == "--shell" ]]; then
-      "$_awsp_bin" "$@"
+      %s "$@"
       return $?
     fi
   done
 
   case "$1" in
     current|list|completion|help|init|version)
-      "$_awsp_bin" "$@"
+      %[1]s "$@"
       return $?
       ;;
   esac
 
   if [[ "$1" == -* ]]; then
-    "$_awsp_bin" "$@"
+    %[1]s "$@"
     return $?
   fi
 
   local _awsp_exports
-  _awsp_exports="$("$_awsp_bin" "$@" --shell)"
+  _awsp_exports="$(%[1]s "$@" --shell)"
   local _status=$?
   if [[ $_status -ne 0 ]]; then
     return $_status
@@ -620,5 +625,5 @@ awsp() {
     echo "🧹 AWS_PROFILE を解除しました"
   fi
 }
-`, escapedPath)
+`, awspCommand)
 }

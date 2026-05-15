@@ -56,13 +56,24 @@ func TestEnsureKnownProfile(t *testing.T) {
 
 func TestRenderZshInitScript(t *testing.T) {
 	t.Run("フラグ指定を profile と誤解釈しない", func(t *testing.T) {
-		script := renderZshInitScript("/usr/local/bin/awsp")
+		script := renderZshInitScript(`"/usr/local/bin/awsp"`)
 
 		if !strings.Contains(script, `if [[ "$1" == -* ]]; then`) {
 			t.Fatalf("フラグ素通しの分岐が存在しない")
 		}
 		if !strings.Contains(script, `current|list|completion|help|init|version`) {
 			t.Fatalf("サブコマンド素通しの分岐が存在しない")
+		}
+	})
+
+	t.Run("実行コマンドを差し替えられる", func(t *testing.T) {
+		script := renderZshInitScript(`NWRELAY_TARGET_BIN=awsp command nwrelay`)
+
+		if !strings.Contains(script, `NWRELAY_TARGET_BIN=awsp command nwrelay "$@"`) {
+			t.Fatalf("差し替えコマンドが通常実行に使われていない")
+		}
+		if !strings.Contains(script, `NWRELAY_TARGET_BIN=awsp command nwrelay "$@" --shell`) {
+			t.Fatalf("差し替えコマンドが shell mode 実行に使われていない")
 		}
 	})
 }
