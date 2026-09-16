@@ -3,7 +3,8 @@
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://go.dev/)
 [![Cobra](https://img.shields.io/badge/Cobra-1.10.2-00A3E0)](https://github.com/spf13/cobra)
 [![AWS SDK for Go v2](https://img.shields.io/badge/AWS_SDK_v2-config%20%2F%20sts-FF9900?logo=amazon-aws)](https://github.com/aws/aws-sdk-go-v2)
-[![pterm](https://img.shields.io/badge/pterm-0.12.x-00C2FF)](https://github.com/pterm/pterm)
+[![Bubble Tea v2](https://img.shields.io/badge/Bubble_Tea-v2-FF75B7)](https://github.com/charmbracelet/bubbletea)
+[![Fang](https://img.shields.io/badge/Fang-v1-874BFD)](https://github.com/charmbracelet/fang)
 [![Lint](https://img.shields.io/badge/lint-golangci--lint-blue)](https://golangci-lint.run/)
 [![CI](https://github.com/kagamirror123/awsp/actions/workflows/ci.yml/badge.svg)](https://github.com/kagamirror123/awsp/actions/workflows/ci.yml)
 [![Release](https://github.com/kagamirror123/awsp/actions/workflows/release.yml/badge.svg)](https://github.com/kagamirror123/awsp/actions/workflows/release.yml)
@@ -20,6 +21,7 @@
 - [Quick Start](#quick-start)
 - [Usage](#usage)
 - [AWS Config Example](#aws-config-example)
+- [MCP サーバー](#mcp-サーバー)
 - [Design Notes](#design-notes)
 - [Development](#development)
 - [Contributing](#contributing)
@@ -71,15 +73,28 @@ GitHub Releases のバイナリだけで使い始められます
 
 ### Demo
 
-```bash
-$ awsp dev
-┌─ 🪪 AWS Caller Identity ──────┐
-| 🔐 Profile : dev              |
-| 🧾 Account : 123456789012     |
-| 👤 UserId  : AIDA...          |
-| 🌍 ARN     : arn:aws:...      |
-└───────────────────────────────┘
-✅ Profile validated: dev
+`awsp list`(D9: 認証状態 / 残り時間 / 最終使用も一覧に表示)
+
+```text
+$ awsp list
+
+📚 Available profiles
+total=2  current=-
+
+╭─────────┬───┬───────────────┬────────────────┬────────┬──────────────┬─────────────────────┬────────┬─────────┬─────────┬───────────╮
+│ Current │ # │ Profile       │ Region         │ Auth   │ Account      │ Role                │ Source │ State   │ Expires │ Last used │
+├─────────┼───┼───────────────┼────────────────┼────────┼──────────────┼─────────────────────┼────────┼─────────┼─────────┼───────────┤
+│ .       │ 1 │ dev           │ us-west-2      │ sso    │ 123456789012 │ AdministratorAccess │ -      │ unknown │ -       │ -         │
+│ .       │ 2 │ prod-readonly │ ap-northeast-1 │ static │ -            │ -                   │ dev    │ -       │ -       │ -         │
+╰─────────┴───┴───────────────┴────────────────┴────────┴──────────────┴─────────────────────┴────────┴─────────┴─────────┴───────────╯
+```
+
+`awsp preflight`(SessionStart フック向けの 1 行確認)
+
+```text
+$ awsp preflight; echo exit=$?
+awsp preflight: AWS SSO 未ログイン(corp)。AWS を使う前に 'awsp login --sso-session corp' を実行してください
+exit=1
 ```
 
 ### 主要コマンド
@@ -98,6 +113,30 @@ awsp current --json
 # プロファイル一覧
 awsp list
 awsp list --json
+
+# AWS SSO セッションの認証状態
+awsp status
+awsp status --json
+awsp status --grace 8h
+
+# SessionStart フック向けの 1 行確認(exit code で成否を返す)
+awsp preflight
+
+# AWS SSO へログイン(既定: Authorization Code + PKCE、承認完了までブロック)
+# ブラウザで承認すると自動で戻る --use-device-code で device code に切り替え可(組織側で無効な場合あり)
+awsp login
+awsp login dev
+awsp login --sso-session corp
+awsp login --no-browser
+awsp login --use-device-code
+
+# 指定 profile の caller identity を確認(自動ログインしない)
+awsp whoami        # AWS_PROFILE の identity
+awsp whoami dev    # profile を指定
+
+# MCP サーバー(stdio)を起動 詳細は MCP サーバー の節を参照
+awsp mcp
+
 
 # 補完とシェル連携
 awsp completion zsh
@@ -165,12 +204,53 @@ source_profile = base
 
 ---
 
+## MCP サーバー
+
+`awsp mcp` で stdio の MCP サーバーとして起動します  
+コーディングエージェントが AWS の状態確認・ログインを行うための道具です
+
+### 登録
+
+Claude Code:
+
+```bash
+claude mcp add awsp -- awsp mcp
+```
+
+Codex(`~/.codex/config.toml` に追記):
+
+```toml
+[mcp_servers.awsp]
+command = "awsp"
+args = ["mcp"]
+```
+
+### ツール
+
+| ツール | 用途 | ネットワーク |
+|---|---|---|
+| `auth_status` | AWS SSO セッションの有効性を確認(`awsp status` 相当) | 使わない(ローカルキャッシュのみ) |
+| `list_profiles` | profile 一覧と認証状態・最終使用情報を取得(`awsp list --json` 相当) | 使わない(ローカルファイルのみ) |
+| `whoami` | 指定 profile の caller identity を確認(自動ログインしない) | 使う(STS) |
+| `login` | AWS SSO へログイン(既定: Authorization Code + PKCE)。承認完了まで待ち、タイムアウト時は認可 URL を返す(`use_device_code` 指定時は device code に切り替え、コードも返す) | 使う(SSO OIDC) |
+
+> [!NOTE]
+> profile の切り替えは人間のシェル(`awsp init zsh` の関数)が行います。MCP サーバーからは
+> エージェント側の環境変数を変更できないため、エージェントは `list_profiles` で得た名前を
+> `aws` コマンドの `--profile <name>` に渡して使います。トークン値・credentials はどのツールの
+> 結果にも含まれません。
+
 ## Design Notes
 
 - caller identity は AWS SDK for Go v2 で型安全に取得
-- SSO セッション確立は `aws sso login` を利用
-- OIDC デバイス認可とトークンキャッシュの実運用を CLI に委譲し、安定性を優先
-- 静的出力は `go-pretty` `pterm` `lipgloss` を組み合わせて視認性を最適化
+- SSO セッション確立は aws CLI を使わず AWS SDK for Go v2(ssooidc)で Authorization Code + PKCE(既定)を自前実装。`--use-device-code` で device authorization flow に切り替え可(組織側で無効な場合あり)(D12)
+- 書き出すトークンキャッシュ(`~/.aws/sso/cache`)は aws CLI / SDK と完全互換
+- 状態確認(`status` / `preflight`)はローカルファイルのみを読み、ネットワークを使わない。ネットワークを使うのは `whoami` と `login` だけ
+- トークン値・credentials はディスク・出力・ログに一切載せない
+- `AWS_CONFIG_FILE` を尊重し、複数の config を切り替えて使えるようにする
+- 描画は Lip Gloss v2 に一本化(`internal/ui`)。TUI は Bubble Tea v2 + Bubbles v2、CLI 外装(ヘルプ・エラー・version)は Fang(D8)
+- 非 TTY 出力や `NO_COLOR` では ANSI 装飾を自動的に落とす(`colorprofile`)
+- 詳細な設計判断は [`docs/design.md`](./docs/design.md) を参照
 
 ---
 
@@ -180,7 +260,6 @@ source_profile = base
 
 ### Prerequisites
 
-- AWS CLI v2
 - [Task](https://taskfile.dev/) (`task` コマンド)
 - `mise` 推奨 または Go 1.26.x
 

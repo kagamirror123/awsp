@@ -16,7 +16,5 @@ var (
 func main() {
 	cmd.SetBuildInfo(version, commit, date)
 
-	if err := cmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	os.Exit(cmd.Execute())
 }
