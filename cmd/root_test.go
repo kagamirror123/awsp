@@ -67,12 +67,12 @@ func TestRenderZshInitScript(t *testing.T) {
 	})
 
 	t.Run("実行コマンドを差し替えられる", func(t *testing.T) {
-		script := renderZshInitScript(`NWRELAY_TARGET_BIN=awsp command nwrelay`)
+		script := renderZshInitScript(`my-wrapper awsp`)
 
-		if !strings.Contains(script, `NWRELAY_TARGET_BIN=awsp command nwrelay "$@"`) {
+		if !strings.Contains(script, `my-wrapper awsp "$@"`) {
 			t.Fatalf("差し替えコマンドが通常実行に使われていない")
 		}
-		if !strings.Contains(script, `NWRELAY_TARGET_BIN=awsp command nwrelay "$@" --shell`) {
+		if !strings.Contains(script, `my-wrapper awsp "$@" --shell`) {
 			t.Fatalf("差し替えコマンドが shell mode 実行に使われていない")
 		}
 	})

@@ -65,5 +65,5 @@ echo 'eval "$(awsp init zsh)"' >> ~/.zshrc
 ラッパー経由で実行したいときは `--command` で中身を差し替えられます。
 
 ```bash
-eval "$(awsp init zsh --command 'NWRELAY_TARGET_BIN=awsp command nwrelay')"
+eval "$(awsp init zsh --command 'my-wrapper awsp')"
 ```
