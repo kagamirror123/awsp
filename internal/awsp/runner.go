@@ -8,10 +8,12 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"time"
 
 	"github.com/kagamirror123/awsp/internal/awscli"
-	"github.com/kagamirror123/awsp/internal/card"
-	"github.com/pterm/pterm"
+	"github.com/kagamirror123/awsp/internal/awsconfig"
+	"github.com/kagamirror123/awsp/internal/ssocache"
+	"github.com/kagamirror123/awsp/internal/ui"
 )
 
 const unsetSelection = "(unset)"
@@ -29,11 +31,43 @@ type Profile struct {
 	SSORoleName   string
 	RoleARN       string
 	SourceProfile string
+
+	// SessionState はこの profile が属する sso-session の状態(D9)
+	// SSO を使わない profile では空文字のまま
+	SessionState ssocache.EvaluationState
+	// SessionExpiresAt は sso-session のトークン有効期限 未算出/該当なしは nil
+	SessionExpiresAt *time.Time
+	// LastUsedAt は ~/.aws/cli/cache の最終使用時刻(mtime) 未算出/該当なしは nil
+	LastUsedAt *time.Time
+	// CredentialExpiresAt は ~/.aws/cli/cache のロール認証情報の有効期限 未算出/該当なしは nil
+	CredentialExpiresAt *time.Time
 }
 
-// ProfileStore は利用可能な AWS プロファイル一覧を返す
+// IsSSO は SSO 関連設定があるかを返す(TUI の状態マーク切り分けに使う D9)
+func (p Profile) IsSSO() bool {
+	return p.SSOSession != "" || p.SSOStartURL != "" || p.SSOAccountID != "" || p.SSORoleName != ""
+}
+
+// toConfigProfile は awsconfig.ResolveSession に渡すための変換
+func (p Profile) toConfigProfile() awsconfig.Profile {
+	return awsconfig.Profile{
+		Name:          p.Name,
+		Region:        p.Region,
+		Output:        p.Output,
+		SSOSession:    p.SSOSession,
+		SSOStartURL:   p.SSOStartURL,
+		SSORegion:     p.SSORegion,
+		SSOAccountID:  p.SSOAccountID,
+		SSORoleName:   p.SSORoleName,
+		RoleARN:       p.RoleARN,
+		SourceProfile: p.SourceProfile,
+	}
+}
+
+// ProfileStore は利用可能な AWS プロファイルと sso-session 一覧を返す
 type ProfileStore interface {
 	Profiles(ctx context.Context) ([]Profile, error)
+	Sessions(ctx context.Context) ([]awsconfig.SSOSession, error)
 }
 
 // Selector は対話的にプロファイルを選ぶ
@@ -41,19 +75,17 @@ type Selector interface {
 	Select(ctx context.Context, profiles []Profile) (string, error)
 }
 
-// AWSClient は AWS 認証処理の抽象
-type AWSClient interface {
-	CallerIdentity(ctx context.Context, profile string) (awscli.Identity, error)
-	SSOSession(ctx context.Context, profile string) (string, error)
-	Login(ctx context.Context, profile string, ssoSession string) error
-}
+// LoginFunc は認証エラー時に SSO ログインを実行する関数
+// 本番では ssologin を使った Login 実装を注入し テストではフェイクに差し替える
+type LoginFunc func(ctx context.Context, session awsconfig.SSOSession, profile string) (LoginResult, error)
 
 // RunnerOptions は Runner 初期化時の依存をまとめる
 type RunnerOptions struct {
 	Logger   *slog.Logger
 	Profiles ProfileStore
 	Selector Selector
-	AWS      AWSClient
+	AWS      AWSIdentityClient
+	Login    LoginFunc
 	Stdout   io.Writer
 	Stderr   io.Writer
 }
@@ -63,7 +95,8 @@ type Runner struct {
 	logger   *slog.Logger
 	profiles ProfileStore
 	selector Selector
-	aws      AWSClient
+	aws      AWSIdentityClient
+	login    LoginFunc
 	stdout   io.Writer
 	stderr   io.Writer
 }
@@ -82,6 +115,7 @@ func NewRunner(options RunnerOptions) *Runner {
 		profiles: options.Profiles,
 		selector: options.Selector,
 		aws:      options.AWS,
+		login:    options.Login,
 		stdout:   options.Stdout,
 		stderr:   options.Stderr,
 	}
@@ -121,7 +155,7 @@ func (r *Runner) Run(ctx context.Context, profileArg string, options RunOptions)
 		if options.ShellMode {
 			return nil
 		}
-		_, _ = fmt.Fprintln(r.stdout, renderSuccessLine(fmt.Sprintf("Login status OK for profile=%s", selected)))
+		_, _ = fmt.Fprintln(r.stdout, ui.SuccessLine(fmt.Sprintf("Login status OK for profile=%s", selected)))
 		return nil
 	}
 
@@ -165,8 +199,7 @@ func (r *Runner) ensureLoggedIn(ctx context.Context, profile string, shellMode b
 	}
 
 	// まず SDK で identity を取得して既存セッションの有効性を確認する
-	// 失敗時はセッション期限切れを想定して CLI ログインへフォールバックする
-	// ログイン導線を CLI に寄せる理由は internal/awscli/client.go の説明を参照
+	// 失敗時はセッション期限切れを想定して SSO ログイン(internal/ssologin)へフォールバックする
 	identity, err := r.aws.CallerIdentity(ctx, profile)
 	if err != nil {
 		if !awscli.IsAuthRelatedError(err) {
@@ -174,22 +207,31 @@ func (r *Runner) ensureLoggedIn(ctx context.Context, profile string, shellMode b
 		}
 
 		_, _ = fmt.Fprintln(writer)
-		_, _ = fmt.Fprintln(writer, renderWarnLine("SSO ログインが必要です"))
-		_, _ = fmt.Fprintln(writer, renderInfoLine("ブラウザ認証を開始します"))
+		_, _ = fmt.Fprintln(writer, ui.WarnLine("SSO ログインが必要です"))
+		_, _ = fmt.Fprintln(writer, ui.InfoLine("ブラウザ認証を開始します"))
 		_, _ = fmt.Fprintln(writer)
 
-		ssoSession, sessionErr := r.aws.SSOSession(ctx, profile)
-		if sessionErr != nil && r.logger != nil {
-			r.logger.Debug("sso_session の取得に失敗", "error", sessionErr)
+		session, sessionErr := r.resolveSession(ctx, profile)
+		if sessionErr != nil {
+			return sessionErr
 		}
 
-		if err := r.aws.Login(ctx, profile, ssoSession); err != nil {
-			return err
+		if r.login == nil {
+			return errors.New("ログイン処理が未設定です")
 		}
 
-		identity, err = r.aws.CallerIdentity(ctx, profile)
-		if err != nil {
-			return fmt.Errorf("ログイン後も identity を取得できません: %w", err)
+		result, loginErr := r.login(ctx, session, profile)
+		if loginErr != nil {
+			return loginErr
+		}
+		if result.Identity == nil {
+			return errors.New("ログイン後も identity を取得できません")
+		}
+
+		identity = awscli.Identity{
+			Account: result.Identity.Account,
+			UserID:  result.Identity.UserID,
+			ARN:     result.Identity.ARN,
 		}
 	}
 
@@ -197,12 +239,36 @@ func (r *Runner) ensureLoggedIn(ctx context.Context, profile string, shellMode b
 	return nil
 }
 
+func (r *Runner) resolveSession(ctx context.Context, profile string) (awsconfig.SSOSession, error) {
+	profiles, err := r.profiles.Profiles(ctx)
+	if err != nil {
+		return awsconfig.SSOSession{}, fmt.Errorf("profile 一覧の取得に失敗: %w", err)
+	}
+	sessions, err := r.profiles.Sessions(ctx)
+	if err != nil {
+		return awsconfig.SSOSession{}, fmt.Errorf("sso-session の取得に失敗: %w", err)
+	}
+
+	for _, p := range profiles {
+		if p.Name != profile {
+			continue
+		}
+		session, ok := awsconfig.ResolveSession(p.toConfigProfile(), sessions)
+		if !ok {
+			return awsconfig.SSOSession{}, fmt.Errorf("profile %q は SSO を使っていません: 認証情報を見直してください", profile)
+		}
+		return session, nil
+	}
+
+	return awsconfig.SSOSession{}, fmt.Errorf("指定プロファイルが見つかりません: %s", profile)
+}
+
 func (r *Runner) emitUnset(shellMode bool) {
 	if shellMode {
 		_, _ = fmt.Fprintln(r.stdout, "unset AWS_PROFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN")
 		return
 	}
-	_, _ = fmt.Fprintln(r.stdout, renderInfoLine("AWS_PROFILE と静的認証情報を解除しました"))
+	_, _ = fmt.Fprintln(r.stdout, ui.InfoLine("AWS_PROFILE と静的認証情報を解除しました"))
 }
 
 func (r *Runner) emitProfile(shellMode bool, profile string) {
@@ -212,8 +278,8 @@ func (r *Runner) emitProfile(shellMode bool, profile string) {
 		_, _ = fmt.Fprintln(r.stdout, "unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN")
 		return
 	}
-	_, _ = fmt.Fprintln(r.stdout, renderSuccessLine(fmt.Sprintf("Profile validated: %s", profile)))
-	_, _ = fmt.Fprintln(r.stdout, renderInfoLine("この実行では親シェルの AWS_PROFILE は変更されません"))
+	_, _ = fmt.Fprintln(r.stdout, ui.SuccessLine(fmt.Sprintf("Profile validated: %s", profile)))
+	_, _ = fmt.Fprintln(r.stdout, ui.InfoLine("この実行では親シェルの AWS_PROFILE は変更されません"))
 }
 
 func (o RunOptions) validate() error {
@@ -232,22 +298,10 @@ func containsProfileName(profiles []Profile, profile string) bool {
 }
 
 func renderIdentityCard(profile string, identity awscli.Identity) string {
-	return card.Render("🪪 AWS Caller Identity", []string{
+	return ui.RenderCard("🪪 AWS Caller Identity", []string{
 		fmt.Sprintf("🔐 Profile : %s", profile),
 		fmt.Sprintf("🧾 Account : %s", identity.Account),
 		fmt.Sprintf("👤 UserId  : %s", identity.UserID),
 		fmt.Sprintf("🌍 ARN     : %s", identity.ARN),
 	})
-}
-
-func renderSuccessLine(message string) string {
-	return pterm.NewStyle(pterm.FgLightGreen, pterm.Bold).Sprintf("✅ %s", message)
-}
-
-func renderInfoLine(message string) string {
-	return pterm.NewStyle(pterm.FgLightBlue).Sprintf("ℹ️ %s", message)
-}
-
-func renderWarnLine(message string) string {
-	return pterm.NewStyle(pterm.FgLightYellow, pterm.Bold).Sprintf("⚠️ %s", message)
 }

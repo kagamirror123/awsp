@@ -8,15 +8,15 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync"
+	"time"
 	"unicode"
+	"unicode/utf8"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/kagamirror123/awsp/internal/awsp"
-	"github.com/mattn/go-runewidth"
-	"github.com/muesli/termenv"
+	"github.com/kagamirror123/awsp/internal/ssocache"
 )
 
 // UnsetOption は環境変数解除を表す擬似プロファイル
@@ -36,8 +36,6 @@ func NewSelector() *Selector {
 
 // NewSelectorWithIO は入出力を指定して Selector を作る
 func NewSelectorWithIO(input io.Reader, output io.Writer) *Selector {
-	selectorColorOnce.Do(configureSelectorColorProfile)
-
 	if input == nil {
 		input = os.Stdin
 	}
@@ -50,33 +48,11 @@ func NewSelectorWithIO(input io.Reader, output io.Writer) *Selector {
 	}
 }
 
-func configureSelectorColorProfile() {
-	if os.Getenv("NO_COLOR") != "" {
-		lipgloss.SetColorProfile(termenv.Ascii)
-		return
-	}
-
-	// 端末差で色が消えるケースを避けるため
-	// 対話画面は ANSI256 以上を明示する
-	if strings.TrimSpace(os.Getenv("COLORTERM")) != "" {
-		lipgloss.SetColorProfile(termenv.TrueColor)
-		return
-	}
-	lipgloss.SetColorProfile(termenv.ANSI256)
-}
-
 // Select は候補を表示して 1 つ選択する
 func (s *Selector) Select(ctx context.Context, profiles []awsp.Profile) (string, error) {
-	items := make([]list.Item, 0, len(profiles)+1)
-	items = append(items, profileItem{profile: awsp.Profile{Name: UnsetOption}})
-	for _, profile := range profiles {
-		items = append(items, profileItem{profile: profile})
-	}
-
-	model := newSelectModel(items)
+	model := newSelectModel(buildItems(profiles, time.Now()))
 	program := tea.NewProgram(
 		model,
-		tea.WithAltScreen(),
 		tea.WithContext(ctx),
 		tea.WithInput(s.input),
 		tea.WithOutput(s.output),
@@ -103,8 +79,18 @@ func (s *Selector) Select(ctx context.Context, profiles []awsp.Profile) (string,
 	return finalModel.selected, nil
 }
 
+func buildItems(profiles []awsp.Profile, now time.Time) []list.Item {
+	items := make([]list.Item, 0, len(profiles)+1)
+	items = append(items, profileItem{profile: awsp.Profile{Name: UnsetOption}, now: now})
+	for _, profile := range profiles {
+		items = append(items, profileItem{profile: profile, now: now})
+	}
+	return items
+}
+
 type profileItem struct {
 	profile awsp.Profile
+	now     time.Time
 }
 
 func (i profileItem) FilterValue() string {
@@ -120,7 +106,7 @@ func (i profileItem) FilterValue() string {
 }
 
 func (i profileItem) Title() string {
-	return fmt.Sprintf("%s %s", profileIcon(i.profile), i.profile.Name)
+	return fmt.Sprintf("%s %s  %s", stateMarker(i.profile), i.profile.Name, remainingLabel(i.profile, i.now))
 }
 
 func (i profileItem) Description() string {
@@ -153,9 +139,15 @@ func newSelectModel(items []list.Item) selectModel {
 	listModel.FilterInput.Prompt = "🔎 "
 	listModel.FilterInput.Placeholder = "profile / region / account / role"
 	listModel.FilterInput.CharLimit = 128
-	listModel.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
-	listModel.FilterInput.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("230"))
-	listModel.FilterInput.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+	filterStyles := listModel.FilterInput.Styles()
+	filterStyles.Focused.Prompt = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
+	filterStyles.Focused.Text = lipgloss.NewStyle().Foreground(lipgloss.Color("230"))
+	filterStyles.Blurred.Prompt = filterStyles.Focused.Prompt
+	filterStyles.Blurred.Text = filterStyles.Focused.Text
+	filterStyles.Cursor.Color = lipgloss.Color("205")
+	listModel.FilterInput.SetStyles(filterStyles)
+
 	listModel.Styles.Title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220"))
 	listModel.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 1)
 	listModel.Styles.NoItems = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Padding(1, 1)
@@ -219,7 +211,7 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyLayout(typed.Width, typed.Height)
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if cmd, handled := m.handleKeyInput(typed); handled {
 			return m, cmd
 		}
@@ -230,7 +222,7 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *selectModel) handleKeyInput(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (m *selectModel) handleKeyInput(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if isQuitKey(msg) {
 		m.aborted = true
 		return tea.Quit, true
@@ -267,11 +259,11 @@ func (m *selectModel) handleKeyInput(msg tea.KeyMsg) (tea.Cmd, bool) {
 	return nil, false
 }
 
-func (m *selectModel) startFiltering(msg tea.KeyMsg) tea.Cmd {
+func (m *selectModel) startFiltering(msg tea.KeyPressMsg) tea.Cmd {
 	var cmds []tea.Cmd
 	var cmd tea.Cmd
 
-	m.list, cmd = m.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m.list, cmd = m.list.Update(tea.KeyPressMsg{Text: "/", Code: '/'})
 	if cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -284,7 +276,7 @@ func (m *selectModel) startFiltering(msg tea.KeyMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m selectModel) View() string {
+func (m selectModel) View() tea.View {
 	size := resolvePaneSize(m.width, m.height)
 	help := helpStyle.Render("↑↓: move  Enter: select  type or /: filter  Esc: clear  q: quit")
 	left := panelStyle.
@@ -297,11 +289,15 @@ func (m selectModel) View() string {
 		Render(m.renderDetail())
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
-	return strings.Join([]string{
+	content := strings.Join([]string{
 		titleStyle.Render("☁️  awsp profile selector"),
 		help,
 		body,
 	}, "\n")
+
+	view := tea.NewView(content)
+	view.AltScreen = true
+	return view
 }
 
 func (m selectModel) renderDetail() string {
@@ -334,6 +330,11 @@ func (m selectModel) renderDetail() string {
 		renderDetailLine("🎭", "role arn", fallbackValue(profile.RoleARN)),
 		renderDetailLine("🔗", "source", fallbackValue(profile.SourceProfile)),
 		"",
+		renderDetailLine(stateMarker(profile), "session state", sessionStateLabel(profile)),
+		renderDetailLine("⏳", "session expires", fallbackTime(profile.SessionExpiresAt)),
+		renderDetailLine("🕘", "last used", fallbackTime(profile.LastUsedAt)),
+		renderDetailLine("🔑", "credential expires", fallbackTime(profile.CredentialExpiresAt)),
+		"",
 		detailMutedStyle.Render("接続時は caller identity を取得して表示"),
 	}
 
@@ -345,6 +346,56 @@ func fallbackValue(value string) string {
 		return "-"
 	}
 	return value
+}
+
+// fallbackTime は時刻を RFC3339 で表示する 未算出/該当なしは "-"(D9)
+func fallbackTime(t *time.Time) string {
+	if t == nil {
+		return "-"
+	}
+	return t.Format(time.RFC3339)
+}
+
+// sessionStateLabel は sso-session の状態を文字列にする SSO を使わない profile は "-"(D9)
+func sessionStateLabel(p awsp.Profile) string {
+	if !p.IsSSO() {
+		return "-"
+	}
+	if p.SessionState == "" {
+		return string(ssocache.StateUnknown)
+	}
+	return string(p.SessionState)
+}
+
+// stateMarker は D9 の一覧行/詳細で使う状態マークを返す
+// SSO セッションの状態は ok 🟢 / warning 🟡 / error 🔴 / unknown ⚪ SSO を使わない profile は 🪪
+func stateMarker(p awsp.Profile) string {
+	switch {
+	case p.Name == UnsetOption:
+		return "🧹"
+	case !p.IsSSO():
+		return "🪪"
+	default:
+		switch p.SessionState {
+		case ssocache.StateOK:
+			return "🟢"
+		case ssocache.StateWarning:
+			return "🟡"
+		case ssocache.StateError:
+			return "🔴"
+		default:
+			return "⚪"
+		}
+	}
+}
+
+// remainingLabel は一覧行に載せる残り時間を返す(D9)
+// awsp.SessionStatus と同じ書式(52m / 11h / 3d) 期限切れは "-11h" のように負で表す
+func remainingLabel(p awsp.Profile, now time.Time) string {
+	if p.SessionExpiresAt == nil {
+		return "-"
+	}
+	return awsp.FormatRemaining(p.SessionExpiresAt.Sub(now))
 }
 
 func (m *selectModel) applyLayout(width int, height int) {
@@ -393,39 +444,40 @@ func currentProfile(item list.Item) (awsp.Profile, bool) {
 
 func renderDetailLine(icon string, key string, value string) string {
 	paddedIcon := padDisplayRight(icon, 2)
-	paddedKey := padDisplayRight(key, 11)
+	paddedKey := padDisplayRight(key, 19)
 	return fmt.Sprintf("%s %s %s", paddedIcon, detailKeyStyle.Render(paddedKey), value)
 }
 
 func padDisplayRight(value string, width int) string {
-	displayWidth := runewidth.StringWidth(value)
+	displayWidth := lipgloss.Width(value)
 	if displayWidth >= width {
 		return value
 	}
 	return value + strings.Repeat(" ", width-displayWidth)
 }
 
-func shouldStartFiltering(msg tea.KeyMsg, filtering bool) bool {
+func shouldStartFiltering(msg tea.KeyPressMsg, filtering bool) bool {
 	if filtering {
 		return false
 	}
 
-	if msg.Alt {
+	key := msg.Key()
+	if key.Mod.Contains(tea.ModAlt) {
 		return false
 	}
 
-	if msg.Type != tea.KeyRunes || len(msg.Runes) == 0 {
+	if key.Text == "" {
 		return false
 	}
 
-	if len(msg.Runes) == 1 {
-		switch msg.String() {
+	if utf8.RuneCountInString(key.Text) == 1 {
+		switch key.Text {
 		case "g", "G", "q", "/":
 			return false
 		}
 	}
 
-	for _, r := range msg.Runes {
+	for _, r := range key.Text {
 		if !unicode.IsPrint(r) {
 			return false
 		}
@@ -434,7 +486,7 @@ func shouldStartFiltering(msg tea.KeyMsg, filtering bool) bool {
 	return true
 }
 
-func isNavigationKey(msg tea.KeyMsg) bool {
+func isNavigationKey(msg tea.KeyPressMsg) bool {
 	switch msg.String() {
 	case "up", "down":
 		return true
@@ -443,23 +495,12 @@ func isNavigationKey(msg tea.KeyMsg) bool {
 	}
 }
 
-func isQuitKey(msg tea.KeyMsg) bool {
+func isQuitKey(msg tea.KeyPressMsg) bool {
 	switch msg.String() {
 	case "ctrl+c", "q":
 		return true
 	default:
 		return false
-	}
-}
-
-func profileIcon(profile awsp.Profile) string {
-	switch {
-	case profile.Name == UnsetOption:
-		return "🧹"
-	case profile.SSOAccountID != "" || profile.SSOSession != "":
-		return "🔐"
-	default:
-		return "🪪"
 	}
 }
 
@@ -487,6 +528,4 @@ var (
 	detailTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220"))
 	detailKeyStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("109")).Bold(true)
 	detailMutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-
-	selectorColorOnce sync.Once
 )

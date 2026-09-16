@@ -1,0 +1,29 @@
+[>4m[?1049h[?25l[?2004h[>4;2m[>1u[H[2J[K☁️  awsp profile selector
+↑↓: move  Enter: select  type or /: filter  Esc: clear  q: quit
+╭──────────────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────╮
+[K│  🧭 Profiles                                             ││ 📋 Profile detail                                       │[120G
+[K│    🧹 (unset)  -                                         ││ 🔐 name                prod                             │[120G
+[K│    🟢 dev  52m                                           ││ 🌏 region              ap-northeast-1                   │[120G
+[K│ │ ▶ 🔴 prod  -11h                                        ││ 🧾 output              -                                │[120G
+[K│    🪪 legacy  -                                          ││ 🧩 sso session         corp                             │[120G
+[K│                                                          ││ 🏢 account id          444455556666                     │[120G
+│                                                          ││ 🛡  role name           ReadOnlyAccess                   │
+[K│                                                          ││ 🎭 role arn            -                                │[120G
+[K│                                                          ││ 🔗 source              -                                │[120G
+│                                                          ││                                                         │
+[K│                                                          ││ 🔴 session state       error                            │[120G
+[K│                                                          ││ ⏳ session expires     2025-12-31T13:00:00Z             │[120G
+[K│                                                          ││ 🕘 last used           -                                │[120G
+[K│                                                          ││ 🔑 credential expires  -                                │[120G
+│                                                          ││                                                         │
+[K│                                                          ││ 接続時は caller identity を取得して表示                 │[120G
+│                                                          ││                                                         │
+│                                                          ││                                                         │
+│                                                          ││                                                         │
+│                                                          ││                                                         │
+│                                                          ││                                                         │
+│                                                          ││                                                         │
+│                                                          ││                                                         │
+│                                                          ││                                                         │
+│                                                          ││                                                         │
+╰──────────────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────╯[>4m[<1u[30;1H[?1049l[?25h[?2004l[?2026$p[?2027$p

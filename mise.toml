@@ -1,2 +1,7 @@
 [tools]
 go = "1.26.0"
+
+[settings]
+# go の版は上の [tools] で決める。go.mod の go ディレクティブを版指定として読ませない
+# (mise が go.mod を読むと「go ディレクティブは最小互換版であって使用版ではない」と毎回警告するため)
+idiomatic_version_file_enable_tools = []

@@ -1,238 +1,124 @@
-# awsp
+<p align="center">
+  <img src="docs/images/hero.png" alt="awsp" width="760">
+</p>
 
-[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://go.dev/)
-[![Cobra](https://img.shields.io/badge/Cobra-1.10.2-00A3E0)](https://github.com/spf13/cobra)
-[![AWS SDK for Go v2](https://img.shields.io/badge/AWS_SDK_v2-config%20%2F%20sts-FF9900?logo=amazon-aws)](https://github.com/aws/aws-sdk-go-v2)
-[![pterm](https://img.shields.io/badge/pterm-0.12.x-00C2FF)](https://github.com/pterm/pterm)
-[![Lint](https://img.shields.io/badge/lint-golangci--lint-blue)](https://golangci-lint.run/)
-[![CI](https://github.com/kagamirror123/awsp/actions/workflows/ci.yml/badge.svg)](https://github.com/kagamirror123/awsp/actions/workflows/ci.yml)
-[![Release](https://github.com/kagamirror123/awsp/actions/workflows/release.yml/badge.svg)](https://github.com/kagamirror123/awsp/actions/workflows/release.yml)
+<p align="center">
+  ターミナルで AWS プロファイルを安全に切り替える CLI。<br>
+  人間はシェルから、AI エージェントは MCP から、同じバイナリを使う。
+</p>
 
-ターミナルで AWS プロファイルを安全に切り替える CLI  
-`~/.aws/config` を読み取り、対話 UI か `awsp <profile>` で選択し、その場で caller identity まで確認できます  
-複数アカウント運用時の誤操作防止と切替速度の両立を狙ったツールです
+<p align="center">
+  <a href="https://github.com/kagamirror123/awsp/releases"><img alt="Release" src="https://img.shields.io/github/v/release/kagamirror123/awsp?display_name=tag&color=00C2FF"></a>
+  <a href="https://github.com/kagamirror123/awsp/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/kagamirror123/awsp/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://go.dev/"><img alt="Go" src="https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white"></a>
+  <a href="https://modelcontextprotocol.io/"><img alt="MCP" src="https://img.shields.io/badge/MCP-server-000000"></a>
+  <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-green"></a>
+</p>
 
-> [!TIP]
-> 最短導線は `Quick Start` の 1-3 を実行して `awsp` を叩くだけです
+<p align="center">
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="docs/usage.md">Usage</a> ·
+  <a href="docs/mcp.md">AI エージェント</a> ·
+  <a href="docs/configuration.md">Configuration</a> ·
+  <a href="docs/design.md">Design</a>
+</p>
 
-## 目次
+## 🎬 Demo
 
-- [Quick Start](#quick-start)
-- [Usage](#usage)
-- [AWS Config Example](#aws-config-example)
-- [Design Notes](#design-notes)
-- [Development](#development)
-- [Contributing](#contributing)
-- [License](#license)
+https://github.com/user-attachments/assets/c5d0397e-0774-4040-b3ea-40bba1de78f0
 
----
+38 秒。人間の切り替え、PKCE ログイン、エージェントが MCP 経由でログインして作業を続けるまで。
+
+## ✨ Features
+
+- **選んで切り替える。** 一覧から選ぶか `awsp <profile>`。切り替えた瞬間に caller identity を確認して表示
+- **認証状態がひと目で分かる。** 各 profile に 🟢🟡🔴、残り時間、最終使用。判定はローカルだけで、ネットワークを使わない
+- **ログインはブラウザで 1 クリック。** Authorization Code + PKCE を Go で内製。aws CLI は不要で、キャッシュは CLI と完全互換
+- **AI エージェントの道具になる。** `awsp mcp` で `auth_status` / `list_profiles` / `whoami` / `login`。`login` は人の承認を待ってから返る
+- **人間と AI で権限を分けられる。** `AWS_CONFIG_FILE` を尊重するので、エージェントには読み取り専用の config だけを見せられる
+- **トークン値はどこにも出さない。** 出力・ログ・MCP の結果のすべてで
 
 ## Quick Start
 
-エンドユーザー向けの最短手順  
-GitHub Releases のバイナリだけで使い始められます
+```bash
+# 1. インストール(macOS arm64 の例。他は Releases から)
+AWSP_VERSION=$(curl -fsSL https://api.github.com/repos/kagamirror123/awsp/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+curl -fL -o /tmp/awsp "https://github.com/kagamirror123/awsp/releases/download/v${AWSP_VERSION}/awsp_${AWSP_VERSION}_darwin_arm64"
+install -m 0755 /tmp/awsp /usr/local/bin/awsp
 
-1. バイナリをダウンロード
-    - リリースページ: [Releases](https://github.com/kagamirror123/awsp/releases)
-    - `raw` 生バイナリ と `tar.gz / zip` を配布
-    - 例: macOS arm64 の生バイナリ
+# 2. シェル連携(awsp <profile> の結果を親シェルに反映するために必要)
+echo 'eval "$(awsp init zsh)"' >> ~/.zshrc && exec zsh
 
-    ```bash
-    AWSP_VERSION=0.6.0
-    curl -fL -o /tmp/awsp "https://github.com/kagamirror123/awsp/releases/download/v${AWSP_VERSION}/awsp_${AWSP_VERSION}_darwin_arm64"
-    ```
+# 3. 使う
+awsp            # 一覧から選ぶ
+awsp dev        # 直接切り替え
+awsp status     # SSO セッションの状態
 
-2. PATH に配置
-
-    ```bash
-    install -m 0755 /tmp/awsp /usr/local/bin/awsp
-    ```
-
-3. シェル連携を有効化
-
-    ```bash
-    echo 'eval "$(awsp init zsh)"' >> ~/.zshrc
-    exec zsh
-    ```
-
-4. 動作確認
-
-    ```bash
-    awsp
-    awsp current
-    ```
-
-> [!IMPORTANT]
-> `awsp <profile>` の結果を親シェルに反映するには `awsp init zsh` の読み込みが必要です
-
----
+# 4. エージェントからも使うなら
+claude mcp add awsp -- awsp mcp
+```
 
 ## Usage
 
-### Demo
+```text
+$ awsp list
+
+📚 Available profiles
+total=3  current=dev
+
+╭──────────┬────────────────┬──────────────┬─────────────────────┬────────┬───────┬─────────╮
+│ Profile  │ Region         │ Account      │ Role                │ Source │ State │ Expires │
+├──────────┼────────────────┼──────────────┼─────────────────────┼────────┼───────┼─────────┤
+│ ▶ dev    │ us-west-2      │ 123456789012 │ AdministratorAccess │ -      │ ok    │ 51m     │
+│   legacy │ ap-northeast-1 │ -            │ -                   │ dev    │ 🪪    │ -       │
+│   prod   │ ap-northeast-1 │ 210987654321 │ ReadOnlyAccess      │ -      │ ok    │ 51m     │
+╰──────────┴────────────────┴──────────────┴─────────────────────┴────────┴───────┴─────────╯
+```
+
+| コマンド | 何をするか |
+|---|---|
+| `awsp` | 対話 UI。文字で絞り込み、↑↓ で移動、Enter で決定 |
+| `awsp <profile>` | 直接切り替え。失効していれば自動でログイン |
+| `awsp status` | sso-session ごとの有効・失効・残り時間 |
+| `awsp login [profile]` | ブラウザで承認するだけ。有効なら何もしない |
+| `awsp current` / `awsp whoami [profile]` | caller identity。`whoami` は自動ログインしない |
+| `awsp list` | 一覧。認証状態と残り時間つき |
+| `awsp preflight` | 1 行と exit code。フックやスクリプト向け |
+| `awsp mcp` | MCP サーバー(stdio) |
+
+すべて `--json` で機械可読になります。詳しくは **[docs/usage.md](docs/usage.md)**。
+
+## 🤖 AI エージェントから使う
 
 ```bash
-$ awsp dev
-┌─ 🪪 AWS Caller Identity ──────┐
-| 🔐 Profile : dev              |
-| 🧾 Account : 123456789012     |
-| 👤 UserId  : AIDA...          |
-| 🌍 ARN     : arn:aws:...      |
-└───────────────────────────────┘
-✅ Profile validated: dev
+claude mcp add awsp -- awsp mcp
 ```
 
-### 主要コマンド
+| ツール | 何をするか |
+|---|---|
+| `auth_status` | SSO セッションの有効・失効。ネットワークなし |
+| `list_profiles` | profile 一覧と account / role / 認証状態 |
+| `whoami` | 指定 profile の caller identity |
+| `login` | ログインを起こし、人がブラウザで承認するまで待ってから返る |
 
-```bash
-# 対話選択
-awsp
+エージェントが `aws` で認証エラーに当たったら `login` を呼び、あなたがブラウザで承認すれば続きが動きます。
+ブラウザを開けなければ URL を返し、再呼び出しで同じフローに合流します。
 
-# 直接指定
-awsp <profile>
+登録方法、`login` の詳しい挙動、読み取り専用 config の作り方は **[docs/mcp.md](docs/mcp.md)**。
 
-# 現在の identity 確認
-awsp current
-awsp current --json
+## Design
 
-# プロファイル一覧
-awsp list
-awsp list --json
+- CLI と MCP は同じ Go 関数の出口が 2 つあるだけ。JSON の型も共有
+- ログインは aws CLI を exec せず SDK(ssooidc)で PKCE を内製。トークンキャッシュは CLI と完全互換
+- 状態確認はローカルファイルだけ。ネットワークを使うのは `whoami` と `login` だけ
+- 描画は Lip Gloss v2 と Bubble Tea v2。非 TTY と `NO_COLOR` では装飾を落とし、表は端末幅に収める
 
-# 補完とシェル連携
-awsp completion zsh
-awsp init zsh
-
-# nwrelay 経由でシェル連携する場合
-eval "$(awsp init zsh --command 'NWRELAY_TARGET_BIN=awsp command nwrelay')"
-```
-
-<details>
-<summary>オプション詳細</summary>
-
-`--login-only`: profile は変更せずログイン状態だけ確認  
-`--no-login`: caller identity / sso login を省略して反映処理のみ実施
-
-`--shell`: `awsp init zsh` が内部利用する export / unset 出力モード
-
-`init zsh --command`: 連携関数内で実行する awsp コマンドを差し替える
-
-</details>
-
----
-
-## AWS Config Example
-
-`awsp` は `~/.aws/config` の `[profile ...]` を読み取ります
-
-<details>
-<summary>SSO の最小構成例</summary>
-
-SSO の最小構成例:
-
-```ini
-[profile dev]
-region = us-west-2
-sso_session = corp
-sso_account_id = 123456789012
-sso_role_name = AdministratorAccess
-
-[sso-session corp]
-sso_start_url = https://example.awsapps.com/start
-sso_region = us-west-2
-sso_registration_scopes = sso:account:access
-```
-
-</details>
-
-<details>
-<summary>role + source_profile の例</summary>
-
-role + source_profile の例:
-
-```ini
-[profile base]
-region = ap-northeast-1
-output = json
-
-[profile prod-readonly]
-region = ap-northeast-1
-role_arn = arn:aws:iam::123456789012:role/ProdReadOnly
-source_profile = base
-```
-
-</details>
-
----
-
-## Design Notes
-
-- caller identity は AWS SDK for Go v2 で型安全に取得
-- SSO セッション確立は `aws sso login` を利用
-- OIDC デバイス認可とトークンキャッシュの実運用を CLI に委譲し、安定性を優先
-- 静的出力は `go-pretty` `pterm` `lipgloss` を組み合わせて視認性を最適化
-
----
-
-## Development
-
-開発者向け情報はここだけ見れば進められるように整理しています
-
-### Prerequisites
-
-- AWS CLI v2
-- [Task](https://taskfile.dev/) (`task` コマンド)
-- `mise` 推奨 または Go 1.26.x
-
-### セットアップ
-
-```bash
-mise install
-task tools
-```
-
-### 日常コマンド
-
-```bash
-task fmt
-task test
-task check
-task build
-```
-
-### リリース確認
-
-```bash
-task release-check
-task release-snapshot
-```
-
-### CI/CD
-
-- CI: `main` push / Pull Request で format lint test
-- CD: `v*` タグ push で GoReleaser が GitHub Release を作成
-- Release note: GitHub 自動生成をベースに必要なら手動編集
-
----
+決定と却下した案の記録は **[docs/design.md](docs/design.md)**。
 
 ## Contributing
 
-Issue / Pull Request を歓迎します  
-大きめの変更は先に Issue で方針共有してもらえると助かります
-
-1. ブランチ作成
-2. 実装
-3. 検証
-
-    ```bash
-    task check
-    ```
-
-4. 変更内容を説明する Pull Request を作成
-
----
+Issue / Pull Request を歓迎します。開発の始め方は **[docs/development.md](docs/development.md)**。
 
 ## License
 
-MIT License  
-詳細は [LICENSE](./LICENSE) を参照
+[MIT](./LICENSE)

@@ -5,9 +5,9 @@
 ## 目的
 
 - `awsp` は AWS プロファイル切り替え CLI
-- `~/.aws/config` の profile を選択して利用する
+- `~/.aws/config`(`AWS_CONFIG_FILE` があればそちら)の profile を選択して利用する
 - caller identity は AWS SDK v2 で確認する
-- SSO セッション開始は `aws sso login` を使う
+- SSO セッション開始は aws CLI を使わず `internal/ssologin`(SDK 内製、既定は Authorization Code + PKCE)で行う
 
 ## リポジトリ前提
 
@@ -31,10 +31,10 @@
 ## 技術スタック
 
 - Go 1.26+
-- Cobra
+- Cobra + Fang(ヘルプ・エラー表示・version)
 - slog
 - AWS SDK for Go v2
-- Bubble Tea + Bubbles + Lip Gloss
+- Bubble Tea v2 / Bubbles v2 / Lip Gloss v2(D8)
 - Taskfile
 - mise
 
@@ -45,20 +45,30 @@
 - docstring とコメントは日本語で書く
 - 不要な抽象化は避ける
 - エラーメッセージは利用者が次の行動を判断できる内容にする
+- Cobra の `Short` / `Long` は日本語で書き始める(Fang が先頭の単語を Title Case にするため「AWS」が「Aws」になる)。設計番号(D1 など)は利用者向け文言に出さない
 
 ## 主要ディレクトリ
 
 - `cmd`: CLI エントリとサブコマンド
-- `internal/awsp`: ユースケース
-- `internal/awscli`: SDK 呼び出しと SSO ログイン
-- `internal/awsconfig`: `~/.aws/config` の読み取り
+- `internal/awsp`: ユースケースと JSON 出力の型
+- `internal/awscli`: SDK 呼び出し(caller identity 確認)
+- `internal/awsconfig`: `~/.aws/config` の読み取り(profile と sso-session)
+- `internal/ssocache`: `~/.aws/sso/cache` `~/.aws/cli/cache` の状態モデル(読み取り専用 ネットワーク禁止)
+- `internal/ssologin`: SSO ログインフローの実装。既定は Authorization Code + PKCE、`--use-device-code` で device authorization flow に切り替え
 - `internal/prompt`: TUI
+- `internal/ui`: CLI 出力(カード・表・行・バッジ)の描画を Lip Gloss v2 に一本化する共通部品(D8)
+- `internal/mcp`: MCP サーバー(stdio)。auth_status / list_profiles / whoami / login の 4 ツール
 
 ## 主要コマンド
 
 - `awsp [profile]`
 - `awsp current`
 - `awsp list --json`
+- `awsp status [--json]`
+- `awsp preflight`
+- `awsp login [profile]`
+- `awsp whoami [profile]`(省略時は AWS_PROFILE)
+- `awsp mcp`
 - `awsp init zsh`
 - `awsp completion zsh`
 

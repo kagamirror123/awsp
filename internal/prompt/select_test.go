@@ -2,9 +2,10 @@ package prompt
 
 import (
 	"testing"
+	"time"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 	"github.com/kagamirror123/awsp/internal/awsp"
 )
 
@@ -13,61 +14,61 @@ func TestShouldStartFiltering(t *testing.T) {
 
 	tests := []struct {
 		name string
-		msg  tea.KeyMsg
+		msg  tea.KeyPressMsg
 		mode bool
 		want bool
 	}{
 		{
 			name: "通常文字はフィルタ開始",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")},
+			msg:  tea.KeyPressMsg{Text: "a", Code: 'a'},
 			mode: false,
 			want: true,
 		},
 		{
 			name: "日本語入力でもフィルタ開始",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("あ")},
+			msg:  tea.KeyPressMsg{Text: "あ", Code: 'あ'},
 			mode: false,
 			want: true,
 		},
 		{
 			name: "j は通常文字としてフィルタ開始",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")},
+			msg:  tea.KeyPressMsg{Text: "j", Code: 'j'},
 			mode: false,
 			want: true,
 		},
 		{
 			name: "k は通常文字としてフィルタ開始",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")},
+			msg:  tea.KeyPressMsg{Text: "k", Code: 'k'},
 			mode: false,
 			want: true,
 		},
 		{
 			name: "q は終了キーとして扱う",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")},
+			msg:  tea.KeyPressMsg{Text: "q", Code: 'q'},
 			mode: false,
 			want: false,
 		},
 		{
 			name: "slash はフィルタ起動キーとして扱う",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")},
+			msg:  tea.KeyPressMsg{Text: "/", Code: '/'},
 			mode: false,
 			want: false,
 		},
 		{
 			name: "Alt 修飾はフィルタ開始しない",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Alt: true},
+			msg:  tea.KeyPressMsg{Text: "a", Code: 'a', Mod: tea.ModAlt},
 			mode: false,
 			want: false,
 		},
 		{
 			name: "非表示文字は開始しない",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'\n'}},
+			msg:  tea.KeyPressMsg{Text: "\n", Code: '\n'},
 			mode: false,
 			want: false,
 		},
 		{
 			name: "すでにフィルタ中なら開始しない",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")},
+			msg:  tea.KeyPressMsg{Text: "a", Code: 'a'},
 			mode: true,
 			want: false,
 		},
@@ -89,22 +90,22 @@ func TestIsNavigationKey(t *testing.T) {
 
 	tests := []struct {
 		name string
-		msg  tea.KeyMsg
+		msg  tea.KeyPressMsg
 		want bool
 	}{
 		{
 			name: "up は移動キー",
-			msg:  tea.KeyMsg{Type: tea.KeyUp},
+			msg:  tea.KeyPressMsg{Code: tea.KeyUp},
 			want: true,
 		},
 		{
 			name: "j は移動キーではない",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")},
+			msg:  tea.KeyPressMsg{Text: "j", Code: 'j'},
 			want: false,
 		},
 		{
 			name: "通常文字は移動キーではない",
-			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")},
+			msg:  tea.KeyPressMsg{Text: "a", Code: 'a'},
 			want: false,
 		},
 	}
@@ -123,12 +124,13 @@ func TestIsNavigationKey(t *testing.T) {
 func TestUpdateArrowKeyExitsFilteringAndMovesCursor(t *testing.T) {
 	t.Parallel()
 
+	now := time.Now()
 	model := newSelectModel([]list.Item{
-		profileItem{profile: awsp.Profile{Name: "dev", Region: "us-west-2"}},
-		profileItem{profile: awsp.Profile{Name: "prod", Region: "us-west-2"}},
+		profileItem{profile: awsp.Profile{Name: "dev", Region: "us-west-2"}, now: now},
+		profileItem{profile: awsp.Profile{Name: "prod", Region: "us-west-2"}, now: now},
 	})
 
-	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	updated, cmd := model.Update(tea.KeyPressMsg{Text: "a", Code: 'a'})
 	current, ok := updated.(selectModel)
 	if !ok {
 		t.Fatal("モデル型の変換に失敗")
@@ -145,7 +147,7 @@ func TestUpdateArrowKeyExitsFilteringAndMovesCursor(t *testing.T) {
 		t.Fatal("文字入力後にフィルタ入力モードへ入っていない")
 	}
 
-	updated, _ = current.Update(tea.KeyMsg{Type: tea.KeyDown})
+	updated, _ = current.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	current, ok = updated.(selectModel)
 	if !ok {
 		t.Fatal("モデル型の変換に失敗")

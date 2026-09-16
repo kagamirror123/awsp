@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/kagamirror123/awsp/internal/awscli"
+	"github.com/kagamirror123/awsp/internal/awsconfig"
 )
 
 func TestRunWithProfileArg(t *testing.T) {
@@ -91,16 +92,34 @@ func TestRunLoginRetry(t *testing.T) {
 	aws := &stubAWSClient{
 		identity:      awscli.Identity{Account: "1", UserID: "u", ARN: "a"},
 		callerErrOnce: errors.New("token has expired"),
-		ssoSession:    "corp",
 	}
+
+	loginCount := 0
+	var loginSession awsconfig.SSOSession
+	var loginProfile string
 
 	runner := NewRunner(RunnerOptions{
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Profiles: stubProfileStore{profiles: []Profile{{Name: "dev"}}},
+		Profiles: stubProfileStore{profiles: []Profile{{Name: "dev", SSOSession: "corp"}}},
 		Selector: stubSelector{selected: "dev"},
 		AWS:      aws,
-		Stdout:   stdout,
-		Stderr:   stderr,
+		Login: func(_ context.Context, session awsconfig.SSOSession, profile string) (LoginResult, error) {
+			loginCount++
+			loginSession = session
+			loginProfile = profile
+			return LoginResult{
+				SchemaVersion: 1,
+				Session:       session.CacheKey(),
+				Identity: &Identity{
+					Profile: profile,
+					Account: "1",
+					UserID:  "u",
+					ARN:     "a",
+				},
+			}, nil
+		},
+		Stdout: stdout,
+		Stderr: stderr,
 	})
 
 	err := runner.Run(context.Background(), "", RunOptions{})
@@ -108,8 +127,14 @@ func TestRunLoginRetry(t *testing.T) {
 		t.Fatalf("Run が失敗: %v", err)
 	}
 
-	if aws.loginCount != 1 {
-		t.Fatalf("Login 呼び出し回数が想定外: %d", aws.loginCount)
+	if loginCount != 1 {
+		t.Fatalf("Login 呼び出し回数が想定外: %d", loginCount)
+	}
+	if loginProfile != "dev" {
+		t.Fatalf("Login に渡した profile が想定外: %s", loginProfile)
+	}
+	if loginSession.CacheKey() != "corp" {
+		t.Fatalf("Login に渡した session が想定外: %+v", loginSession)
 	}
 }
 
@@ -169,21 +194,26 @@ func TestRunNonAuthErrorDoesNotLogin(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	aws := &stubAWSClient{callerErrOnce: errors.New("dial tcp: i/o timeout")}
 
+	loginCalled := false
 	runner := NewRunner(RunnerOptions{
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Profiles: stubProfileStore{profiles: []Profile{{Name: "dev"}}},
 		Selector: stubSelector{selected: "dev"},
 		AWS:      aws,
-		Stdout:   stdout,
-		Stderr:   io.Discard,
+		Login: func(_ context.Context, _ awsconfig.SSOSession, _ string) (LoginResult, error) {
+			loginCalled = true
+			return LoginResult{}, nil
+		},
+		Stdout: stdout,
+		Stderr: io.Discard,
 	})
 
 	err := runner.Run(context.Background(), "", RunOptions{})
 	if err == nil {
 		t.Fatal("非認証エラーで失敗しなかった")
 	}
-	if aws.loginCount != 0 {
-		t.Fatalf("非認証エラーで login が呼ばれた: %d", aws.loginCount)
+	if loginCalled {
+		t.Fatal("非認証エラーで login が呼ばれた")
 	}
 }
 
@@ -204,6 +234,10 @@ func (s stubProfileStore) Profiles(_ context.Context) ([]Profile, error) {
 	return s.profiles, nil
 }
 
+func (s stubProfileStore) Sessions(_ context.Context) ([]awsconfig.SSOSession, error) {
+	return nil, nil
+}
+
 type stubSelector struct {
 	selected string
 }
@@ -218,8 +252,6 @@ func (s stubSelector) Select(_ context.Context, _ []Profile) (string, error) {
 type stubAWSClient struct {
 	identity       awscli.Identity
 	callerErrOnce  error
-	ssoSession     string
-	loginCount     int
 	calledProfiles []string
 }
 
@@ -231,13 +263,4 @@ func (s *stubAWSClient) CallerIdentity(_ context.Context, profile string) (awscl
 		return awscli.Identity{}, err
 	}
 	return s.identity, nil
-}
-
-func (s *stubAWSClient) SSOSession(_ context.Context, _ string) (string, error) {
-	return s.ssoSession, nil
-}
-
-func (s *stubAWSClient) Login(_ context.Context, _ string, _ string) error {
-	s.loginCount++
-	return nil
 }

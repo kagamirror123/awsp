@@ -10,9 +10,9 @@ func TestIsAuthRelatedError(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{name: "auth token expired", err: &commandError{Err: errString("token has expired")}, want: true},
-		{name: "auth invalid token", err: &commandError{Err: errString("SSOProviderInvalidToken")}, want: true},
-		{name: "network timeout", err: &commandError{Err: errString("dial tcp: i/o timeout")}, want: false},
+		{name: "auth token expired", err: errString("token has expired"), want: true},
+		{name: "auth invalid token", err: errString("SSOProviderInvalidToken"), want: true},
+		{name: "network timeout", err: errString("dial tcp: i/o timeout"), want: false},
 	}
 
 	for _, tc := range tests {

@@ -61,7 +61,7 @@ func TestRenderZshInitScript(t *testing.T) {
 		if !strings.Contains(script, `if [[ "$1" == -* ]]; then`) {
 			t.Fatalf("フラグ素通しの分岐が存在しない")
 		}
-		if !strings.Contains(script, `current|list|completion|help|init|version`) {
+		if !strings.Contains(script, `current|list|completion|help|init|version|status|preflight|login|whoami|mcp`) {
 			t.Fatalf("サブコマンド素通しの分岐が存在しない")
 		}
 	})
@@ -74,6 +74,29 @@ func TestRenderZshInitScript(t *testing.T) {
 		}
 		if !strings.Contains(script, `NWRELAY_TARGET_BIN=awsp command nwrelay "$@" --shell`) {
 			t.Fatalf("差し替えコマンドが shell mode 実行に使われていない")
+		}
+	})
+}
+
+func TestResolveConfigFilePath(t *testing.T) {
+	t.Run("AWS_CONFIG_FILE が優先される", func(t *testing.T) {
+		t.Setenv("AWS_CONFIG_FILE", "/tmp/custom-aws-config")
+
+		got := resolveConfigFilePath()
+		if got != "/tmp/custom-aws-config" {
+			t.Fatalf("AWS_CONFIG_FILE が尊重されていない: %s", got)
+		}
+	})
+
+	t.Run("未設定時は SDK 既定の ~/.aws/config を使う", func(t *testing.T) {
+		homeDir := t.TempDir()
+		t.Setenv("HOME", homeDir)
+		t.Setenv("AWS_CONFIG_FILE", "")
+
+		got := resolveConfigFilePath()
+		want := filepath.Join(homeDir, ".aws", "config")
+		if got != want {
+			t.Fatalf("既定パスが想定外: got=%s want=%s", got, want)
 		}
 	})
 }
@@ -93,4 +116,6 @@ func setHomeWithAWSConfig(t *testing.T, content string) {
 	}
 
 	t.Setenv("HOME", homeDir)
+	// AWS_CONFIG_FILE が実行環境で設定されていても(D5)テストの HOME を優先させる
+	t.Setenv("AWS_CONFIG_FILE", "")
 }
