@@ -22,9 +22,9 @@ npm run stills    # out/still-<秒>s.png (2/8/15/24/32/37s) を書き出す
 | # | 秒 | シーン | 内容 |
 |---|---|---|---|
 | 1 | 0–3s | タイトル | `awsp` ワードマーク(remocn `SoftBlurIn`)+ サブコピーを `MarkerHighlight` でハイライト |
-| 2 | 3–12s | 人間の流れ | `awsp` 型入力 → 対話 UI モック(左: profile 一覧 + 認証状態・残り時間、右: 詳細)→ ↓↓ で `agoop-dev` 選択 → Enter → identity カード → `✅ Set AWS_PROFILE=agoop-dev` |
+| 2 | 3–12s | 人間の流れ | `awsp` 型入力 → 対話 UI モック(左: profile 一覧 + 認証状態・残り時間、右: 詳細)→ ↓↓ で `dev` 選択 → Enter → identity カード → `✅ Set AWS_PROFILE=dev` |
 | 3 | 12–19s | 認証 | `awsp status`(State 🔴 error / Remaining `-11h`)→ `awsp login --sso-session corp` → ブラウザ承認カード(remocn `SimulatedCursor` でクリック)→ `✅ AWS SSO Login` カード → 表が 🟢 ok に切り替わる(remocn `ValueSwap`) |
-| 4 | 19–30s | エージェントの流れ(山場) | 左に Claude Code 風チャット、右に MCP の JSON。`auth_status`(error)→ `login`(ブラウザ承認待ち → 承認)→ `aws s3 ls --profile agoop-prod` → バケット一覧 |
+| 4 | 19–30s | エージェントの流れ(山場) | 左に Claude Code 風チャット、右に MCP の JSON。`auth_status`(error)→ `login`(ブラウザ承認待ち → 承認)→ `aws s3 ls --profile prod` → バケット一覧 |
 | 5 | 30–35s | 設計の要点 | 3 枚のカードが順に登場(remocn アイコン `CodeIcon` / `EyeOffIcon` / `ShieldIcon`) |
 | 6 | 35–38s | 締め | `claude mcp add awsp -- awsp mcp` と `github.com/kagamirror123/awsp` → ワードマークで終了 |
 
