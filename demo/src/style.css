@@ -1,0 +1,12 @@
+:root {
+  /* remocn の各コンポーネントが参照するフォント変数。
+     端末部分はモノスペース、見出し・日本語文はサンセリフ(日本語グリフを含むスタック)。 */
+  --font-geist-mono: "SF Mono", "JetBrains Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --font-geist-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Noto Sans JP", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}

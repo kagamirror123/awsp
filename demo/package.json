@@ -1,0 +1,28 @@
+{
+  "name": "awsp-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "awsp 紹介デモ動画 (Remotion + remocn)",
+  "scripts": {
+    "start": "remotion studio src/index.ts",
+    "build": "remotion bundle src/index.ts",
+    "render": "remotion render src/index.ts AwspDemo out/awsp-demo.mp4",
+    "stills": "node scripts/render-stills.mjs",
+    "upgrade": "remotion upgrade"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.525",
+    "@remotion/paths": "^4.0.525",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.525"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "7.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
+}
