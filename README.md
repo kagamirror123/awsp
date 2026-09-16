@@ -23,11 +23,11 @@
   <a href="docs/design.md">Design</a>
 </p>
 
-<!--
-デモ動画: demo/ の Remotion プロジェクトからレンダーした MP4 を GitHub の Issue か PR のコメント欄に
-ドラッグ&ドロップし、得られた user-attachments の URL をここに <video> ではなく素の URL として貼る。
-GitHub が README 上でインライン再生する。動画ファイル自体は git に入れない。
--->
+## 🎬 Demo
+
+https://github.com/user-attachments/assets/c5d0397e-0774-4040-b3ea-40bba1de78f0
+
+38 秒。人間の切り替え、PKCE ログイン、エージェントが MCP 経由でログインして作業を続けるまで。
 
 ## ✨ Features
 
