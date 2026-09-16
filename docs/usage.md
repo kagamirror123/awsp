@@ -129,7 +129,6 @@ $ awsp status --json
 | `--login-only` | profile は変更せずログイン状態だけ確認 |
 | `--no-login` | caller identity の確認とログインを省略して反映処理のみ |
 | `--shell` | `awsp init zsh` が内部で使う export / unset 出力モード |
-| `init zsh --command '<cmd>'` | 連携関数内で実行するコマンドを差し替える(ラッパー経由で awsp を起動したいとき) |
 | `-v, --verbose` | 詳細ログ |
 
 ## 端末と出力

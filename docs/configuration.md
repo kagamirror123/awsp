@@ -61,9 +61,3 @@ echo 'eval "$(awsp init zsh)"' >> ~/.zshrc
 
 生成される関数は、`awsp <profile>` のときだけ `awsp <profile> --shell` を呼んでその出力(`export` / `unset`)を `eval` します。
 サブコマンド(`current` `list` `status` `login` など)はそのままバイナリに渡します。
-
-ラッパー経由で実行したいときは `--command` で中身を差し替えられます。
-
-```bash
-eval "$(awsp init zsh --command 'my-wrapper awsp')"
-```

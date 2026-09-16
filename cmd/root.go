@@ -497,31 +497,23 @@ func newInitCmd() *cobra.Command {
 }
 
 func newInitZshCmd() *cobra.Command {
-	var awspCommand string
-
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:                   "zsh",
 		Short:                 "連携関数を出力 (zsh 用)",
 		Args:                  cobra.NoArgs,
 		DisableFlagsInUseLine: true,
 		SilenceUsage:          true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// 関数には自分自身の絶対パスを埋め込む(PATH の変化に影響されないため)
 			awspPath := "awsp"
-			exePath, err := os.Executable()
-			if err == nil && exePath != "" {
+			if exePath, err := os.Executable(); err == nil && exePath != "" {
 				awspPath = exePath
 			}
-			if strings.TrimSpace(awspCommand) == "" {
-				awspCommand = strconv.Quote(awspPath)
-			}
 
-			_, err = io.WriteString(cmd.OutOrStdout(), renderZshInitScript(awspCommand))
+			_, err := io.WriteString(cmd.OutOrStdout(), renderZshInitScript(strconv.Quote(awspPath)))
 			return err
 		},
 	}
-
-	cmd.Flags().StringVar(&awspCommand, "command", "", "連携関数内で実行する awsp コマンド")
-	return cmd
 }
 
 // resolveConfigFilePath は AWS config ファイルのパスを決める(D5)
@@ -750,7 +742,9 @@ func profileLastUsedLabel(profile awsp.Profile) string {
 	return profile.LastUsedAt.Local().Format("01-02 15:04")
 }
 
-func renderZshInitScript(awspCommand string) string {
+// renderZshInitScript は親シェルへ反映するための zsh 関数を生成する
+// awspBinary は quote 済みのバイナリパス
+func renderZshInitScript(awspBinary string) string {
 	return fmt.Sprintf(`# awsp zsh integration
 awsp() {
   local _arg
@@ -788,5 +782,5 @@ awsp() {
     echo "🧹 AWS_PROFILE を解除しました"
   fi
 }
-`, awspCommand)
+`, awspBinary)
 }
