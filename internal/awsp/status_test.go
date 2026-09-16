@@ -27,7 +27,7 @@ func TestBuildStatusReport_SingleSessionOK(t *testing.T) {
 	cacheDir := t.TempDir()
 	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
 
-	writeTokenFixture(t, cacheDir, "nozomu-sso", `{
+	writeTokenFixture(t, cacheDir, "corp-sso", `{
 		"startUrl": "https://example.awsapps.com/start",
 		"region": "us-west-2",
 		"accessToken": "dummy",
@@ -35,10 +35,10 @@ func TestBuildStatusReport_SingleSessionOK(t *testing.T) {
 	}`)
 
 	profiles := []awsconfig.Profile{
-		{Name: "dev", SSOSession: "nozomu-sso", SSOAccountID: "123456789012", SSORoleName: "AdministratorAccess"},
+		{Name: "dev", SSOSession: "corp-sso", SSOAccountID: "123456789012", SSORoleName: "AdministratorAccess"},
 	}
 	sessions := []awsconfig.SSOSession{
-		{Name: "nozomu-sso", StartURL: "https://example.awsapps.com/start", Region: "us-west-2"},
+		{Name: "corp-sso", StartURL: "https://example.awsapps.com/start", Region: "us-west-2"},
 	}
 
 	report, err := BuildStatusReport(profiles, sessions, StatusOptions{
@@ -72,7 +72,7 @@ func TestBuildStatusReport_SingleSessionOK(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode が想定外: %d", exitCode)
 	}
-	want := "awsp preflight: AWS SSO 有効(nozomu-sso 残り 52m)"
+	want := "awsp preflight: AWS SSO 有効(corp-sso 残り 52m)"
 	if line != want {
 		t.Fatalf("PreflightLine が想定外\nwant=%s\ngot=%s", want, line)
 	}
@@ -84,7 +84,7 @@ func TestBuildStatusReport_ErrorState(t *testing.T) {
 	cacheDir := t.TempDir()
 	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
 
-	writeTokenFixture(t, cacheDir, "nozomu-sso", `{
+	writeTokenFixture(t, cacheDir, "corp-sso", `{
 		"startUrl": "https://example.awsapps.com/start",
 		"region": "us-west-2",
 		"accessToken": "dummy",
@@ -92,10 +92,10 @@ func TestBuildStatusReport_ErrorState(t *testing.T) {
 	}`)
 
 	profiles := []awsconfig.Profile{
-		{Name: "dev", SSOSession: "nozomu-sso"},
+		{Name: "dev", SSOSession: "corp-sso"},
 	}
 	sessions := []awsconfig.SSOSession{
-		{Name: "nozomu-sso", StartURL: "https://example.awsapps.com/start", Region: "us-west-2"},
+		{Name: "corp-sso", StartURL: "https://example.awsapps.com/start", Region: "us-west-2"},
 	}
 
 	report, err := BuildStatusReport(profiles, sessions, StatusOptions{
@@ -114,7 +114,7 @@ func TestBuildStatusReport_ErrorState(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("exitCode が想定外: %d", exitCode)
 	}
-	want := "awsp preflight: AWS SSO 失効(nozomu-sso 11h 前)。AWS を使う前に 'awsp login --sso-session nozomu-sso' を実行してください"
+	want := "awsp preflight: AWS SSO 失効(corp-sso 11h 前)。AWS を使う前に 'awsp login --sso-session corp-sso' を実行してください"
 	if line != want {
 		t.Fatalf("PreflightLine が想定外\nwant=%s\ngot=%s", want, line)
 	}
@@ -126,10 +126,10 @@ func TestBuildStatusReport_UnknownState(t *testing.T) {
 	cacheDir := t.TempDir()
 
 	profiles := []awsconfig.Profile{
-		{Name: "dev", SSOSession: "nozomu-sso"},
+		{Name: "dev", SSOSession: "corp-sso"},
 	}
 	sessions := []awsconfig.SSOSession{
-		{Name: "nozomu-sso", StartURL: "https://example.awsapps.com/start", Region: "us-west-2"},
+		{Name: "corp-sso", StartURL: "https://example.awsapps.com/start", Region: "us-west-2"},
 	}
 
 	report, err := BuildStatusReport(profiles, sessions, StatusOptions{
@@ -148,7 +148,7 @@ func TestBuildStatusReport_UnknownState(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("exitCode が想定外: %d", exitCode)
 	}
-	want := "awsp preflight: AWS SSO 未ログイン(nozomu-sso)。AWS を使う前に 'awsp login --sso-session nozomu-sso' を実行してください"
+	want := "awsp preflight: AWS SSO 未ログイン(corp-sso)。AWS を使う前に 'awsp login --sso-session corp-sso' を実行してください"
 	if line != want {
 		t.Fatalf("PreflightLine が想定外\nwant=%s\ngot=%s", want, line)
 	}

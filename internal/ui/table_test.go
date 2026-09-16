@@ -18,7 +18,7 @@ func TestTable_MaxWidthKeepsEveryLineWithinLimit(t *testing.T) {
 		DropWhenNarrow("Remaining", "Expires")
 
 	table.AddRow(
-		"nozomu-sso-with-a-very-long-descriptive-name-that-does-not-fit",
+		"corp-sso-with-a-very-long-descriptive-name-that-does-not-fit",
 		"ok",
 		"09-16 12:00",
 		"11h",

@@ -13,7 +13,7 @@ const ROWS: ProfileRow[] = [
   { name: "security", region: "us-west-2", account: "123456789012", role: "AdministratorAccess", state: "ok", remaining: "23m" },
   { name: "dev", region: "us-west-2", account: "123456789012", role: "AdministratorAccess", state: "ok", remaining: "1h58m" },
   { name: "staging", region: "us-west-2", account: "123456789012", role: "AdministratorAccess", state: "warning", remaining: "3m" },
-  { name: "prod", region: "us-west-2", account: "123456789012", role: "AIAgentReadOnlyAccess", state: "ok", remaining: "6m" },
+  { name: "prod", region: "us-west-2", account: "123456789012", role: "ReadOnlyAccess", state: "ok", remaining: "6m" },
   { name: "sandbox", region: "us-west-2", account: "123456789012", role: "AdministratorAccess", state: "error", remaining: "-2h" },
 ];
 

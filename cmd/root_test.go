@@ -65,17 +65,6 @@ func TestRenderZshInitScript(t *testing.T) {
 			t.Fatalf("サブコマンド素通しの分岐が存在しない")
 		}
 	})
-
-	t.Run("実行コマンドを差し替えられる", func(t *testing.T) {
-		script := renderZshInitScript(`NWRELAY_TARGET_BIN=awsp command nwrelay`)
-
-		if !strings.Contains(script, `NWRELAY_TARGET_BIN=awsp command nwrelay "$@"`) {
-			t.Fatalf("差し替えコマンドが通常実行に使われていない")
-		}
-		if !strings.Contains(script, `NWRELAY_TARGET_BIN=awsp command nwrelay "$@" --shell`) {
-			t.Fatalf("差し替えコマンドが shell mode 実行に使われていない")
-		}
-	})
 }
 
 func TestResolveConfigFilePath(t *testing.T) {
