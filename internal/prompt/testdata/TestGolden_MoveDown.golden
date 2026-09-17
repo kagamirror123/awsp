@@ -1,24 +1,22 @@
-[>4m[?1049h[?25l[?2004h[>4;2m[>1u[H[2J[K☁️  awsp profile selector
+☁️  awsp profile selector
 ↑↓: move  Enter: select  type or /: filter  Esc: clear  q: quit
 ╭──────────────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────╮
-[K│  🧭 Profiles                                             ││ 📋 Profile detail                                       │[120G
-[K│    🧹 (unset)  -                                         ││ 🔐 name                dev                              │[120G
-[K│ │ ▶ 🟢 dev  52m                                          ││ 🌏 region              us-west-2                        │[120G
-[K│    🔴 prod  -11h                                         ││ 🧾 output              -                                │[120G
-[K│    🪪 legacy  -                                          ││ 🧩 sso session         corp                             │[120G
-[K│                                                          ││ 🏢 account id          111122223333                     │[120G
+│  🧭 Profiles                                             ││ 📋 Profile detail                                       │
+│    🧹 (unset)  -                                         ││ 🔐 name                dev                              │
+│ │ ▶ 🟢 dev  52m                                          ││ 🌏 region              us-west-2                        │
+│    🔴 prod  -11h                                         ││ 🧾 output              -                                │
+│    🪪 legacy  -                                          ││ 🧩 sso session         corp                             │
+│                                                          ││ 🏢 account id          111122223333                     │
 │                                                          ││ 🛡  role name           AdministratorAccess              │
-[K│                                                          ││ 🎭 role arn            -                                │[120G
-[K│                                                          ││ 🔗 source              -                                │[120G
+│                                                          ││ 🎭 role arn            -                                │
+│                                                          ││ 🔗 source              -                                │
 │                                                          ││                                                         │
-[K│                                                          ││ 🟢 session state       ok                               │[120G
-[K│                                                          ││ ⏳ session expires     2026-01-01T00:52:00Z             │[120G
-[K│                                                          ││ 🕘 last used           -                                │[120G
-[K│                                                          ││ 🔑 credential expires  -                                │[120G
+│                                                          ││ 🟢 session state       ok                               │
+│                                                          ││ ⏳ session expires     2026-01-01T00:52:00Z             │
+│                                                          ││ 🕘 last used           -                                │
+│                                                          ││ 🔑 credential expires  -                                │
 │                                                          ││                                                         │
-[K│                                                          ││ 接続時は caller identity を取得して表示                 │[120G
-│                                                          ││                                                         │
-│                                                          ││                                                         │
+│                                                          ││ 接続時は caller identity を取得して表示                 │
 │                                                          ││                                                         │
 │                                                          ││                                                         │
 │                                                          ││                                                         │
@@ -26,4 +24,6 @@
 │                                                          ││                                                         │
 │                                                          ││                                                         │
 │                                                          ││                                                         │
-╰──────────────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────╯[>4m[<1u[30;1H[?1049l[?25h[?2004l[?2026$p[?2027$p
+│                                                          ││                                                         │
+│                                                          ││                                                         │
+╰──────────────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────╯

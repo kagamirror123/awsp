@@ -1,24 +1,22 @@
-[?2026$p[?2027$p[>4m[?1049h[?25l[?2004h[>4;2m[>1u[?u[H[2J[K☁️  awsp profile selector
+☁️  awsp profile selector
 ↑↓: move  Enter: select  type or /: filter  Esc: clear  q: quit
 ╭───────────────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────╮
-[K│  🔎 dev                                                   ││ 📋 Profile detail                                       │
-[K│ │ ▶ 🟢 dev  52m                                           ││ 🔐 name                dev                              │
-[K│                                                           ││ 🌏 region              us-west-2                        │
-[K│                                                           ││ 🧾 output              -                                │
-[K│                                                           ││ 🧩 sso session         corp                             │
-[K│                                                           ││ 🏢 account id          111122223333                     │
+│  🔎 dev                                                   ││ 📋 Profile detail                                       │
+│ │ ▶ 🟢 dev  52m                                           ││ 🔐 name                dev                              │
+│                                                           ││ 🌏 region              us-west-2                        │
+│                                                           ││ 🧾 output              -                                │
+│                                                           ││ 🧩 sso session         corp                             │
+│                                                           ││ 🏢 account id          111122223333                     │
 │                                                           ││ 🛡  role name           AdministratorAccess              │
-[K│                                                           ││ 🎭 role arn            -                                │
-[K│                                                           ││ 🔗 source              -                                │
+│                                                           ││ 🎭 role arn            -                                │
+│                                                           ││ 🔗 source              -                                │
 │                                                           ││                                                         │
-[K│                                                           ││ 🟢 session state       ok                               │
-[K│                                                           ││ ⏳ session expires     2026-01-01T00:52:00Z             │
-[K│                                                           ││ 🕘 last used           -                                │
-[K│                                                           ││ 🔑 credential expires  -                                │
+│                                                           ││ 🟢 session state       ok                               │
+│                                                           ││ ⏳ session expires     2026-01-01T00:52:00Z             │
+│                                                           ││ 🕘 last used           -                                │
+│                                                           ││ 🔑 credential expires  -                                │
 │                                                           ││                                                         │
-[K│                                                           ││ 接続時は caller identity を取得して表示                 │
-│                                                           ││                                                         │
-│                                                           ││                                                         │
+│                                                           ││ 接続時は caller identity を取得して表示                 │
 │                                                           ││                                                         │
 │                                                           ││                                                         │
 │                                                           ││                                                         │
@@ -26,22 +24,6 @@
 │                                                           ││                                                         │
 │                                                           ││                                                         │
 │                                                           ││                                                         │
-╰───────────────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────╯[H[K☁️  awsp profile selector
-
-
-[K│  🔎 dev                                                   ││ 📋 Profile detail                                       │
-[K│ │ ▶ 🟢 dev  52m                                           ││ 🔐 name                dev                              │
-[K│                                                           ││ 🌏 region              us-west-2                        │
-[K│                                                           ││ 🧾 output              -                                │
-[K│                                                           ││ 🧩 sso session         corp                             │
-[K│                                                           ││ 🏢 account id          111122223333                     │
-
-[K│                                                           ││ 🎭 role arn            -                                │
-[K│                                                           ││ 🔗 source              -                                │
-
-[K│                                                           ││ 🟢 session state       ok                               │
-[K│                                                           ││ ⏳ session expires     2026-01-01T00:52:00Z             │
-[K│                                                           ││ 🕘 last used           -                                │
-[K│                                                           ││ 🔑 credential expires  -                                │
-
-[K│                                                           ││ 接続時は caller identity を取得して表示                 │[>4m[<1u[30;1H[?1049l[?25h[?2004l
+│                                                           ││                                                         │
+│                                                           ││                                                         │
+╰───────────────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────╯

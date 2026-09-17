@@ -1,19 +1,29 @@
 package prompt
 
 import (
-	"io"
+	"flag"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/colorprofile"
-	teatest "github.com/charmbracelet/x/exp/teatest/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/kagamirror123/awsp/internal/awsp"
 	"github.com/kagamirror123/awsp/internal/ssocache"
 )
 
+// updateGolden は -update でゴールデンを書き直すためのフラグ
+var updateGolden = flag.Bool("update", false, "ゴールデンファイルを現在の出力で更新する")
+
 // goldenNow はゴールデンテストの基準時刻(残り時間表示を決定的にするため固定する)
 var goldenNow = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// ゴールデンの描画に使う端末サイズ
+const (
+	goldenWidth  = 120
+	goldenHeight = 30
+)
 
 func goldenProfiles() []awsp.Profile {
 	okExpires := goldenNow.Add(52 * time.Minute)
@@ -47,65 +57,121 @@ func goldenProfiles() []awsp.Profile {
 	}
 }
 
-// newGoldenTestModel は色プロファイルを固定した teatest.TestModel を作る
-// 色プロファイル依存でゴールデンが不安定にならないようにする
-func newGoldenTestModel(t *testing.T) *teatest.TestModel {
+// newGoldenModel は端末サイズを与えた初期モデルを返す
+func newGoldenModel(t *testing.T) tea.Model {
 	t.Helper()
 
-	model := newSelectModel(buildItems(goldenProfiles(), goldenNow))
-	return teatest.NewTestModel(
-		t,
-		model,
-		teatest.WithInitialTermSize(120, 30),
-		teatest.WithProgramOptions(tea.WithColorProfile(colorprofile.NoTTY)),
-	)
+	var model tea.Model = newSelectModel(buildItems(goldenProfiles(), goldenNow))
+	return apply(t, model, tea.WindowSizeMsg{Width: goldenWidth, Height: goldenHeight})
+}
+
+// apply はモデルにメッセージを順に適用し 返ってきたコマンドも同期的に実行して結果を反映する
+//
+// tea.Program のループを回さないのが肝。プログラムを動かすとフレーム数と描画の刻みが
+// スケジューリング次第で変わり、出力の比較が環境ごとに揺れる(実際に CI で散発的に落ちた)。
+// ここでは Update を直接呼び 非同期コマンド(list の絞り込みが返す FilterMatchesMsg など)も
+// その場で実行して畳むので、同じ入力なら必ず同じ結果になる。
+func apply(t *testing.T, model tea.Model, msgs ...tea.Msg) tea.Model {
+	t.Helper()
+
+	for _, msg := range msgs {
+		var cmd tea.Cmd
+		model, cmd = model.Update(msg)
+		model = drain(t, model, cmd, 0)
+	}
+	return model
+}
+
+// cmdTimeout は 1 つのコマンドの完了を待つ上限
+// カーソル点滅のようなタイマーはこの時間内に返らないので畳まずに捨てる
+// 状態を確定させるコマンド(絞り込み結果など)は即座に返るので取りこぼさない
+const cmdTimeout = 100 * time.Millisecond
+
+// drain はコマンドを実行して得たメッセージをモデルへ戻す
+// depth は相互に発火し続けるコマンドで止まらなくなるのを防ぐための上限
+func drain(t *testing.T, model tea.Model, cmd tea.Cmd, depth int) tea.Model {
+	t.Helper()
+
+	const maxDepth = 16
+	if cmd == nil {
+		return model
+	}
+	if depth >= maxDepth {
+		t.Fatalf("コマンドの連鎖が %d 段を超えた", maxDepth)
+	}
+
+	msg, ok := runCmd(cmd)
+	if !ok {
+		return model
+	}
+
+	switch typed := msg.(type) {
+	case nil:
+		return model
+	case tea.BatchMsg:
+		for _, batched := range typed {
+			model = drain(t, model, batched, depth+1)
+		}
+		return model
+	case tea.QuitMsg:
+		// 終了要求は描画に影響しないので無視する
+		return model
+	default:
+		var next tea.Cmd
+		model, next = model.Update(msg)
+		return drain(t, model, next, depth+1)
+	}
+}
+
+// runCmd はコマンドを実行して結果を返す 時間内に返らなければ ok=false
+func runCmd(cmd tea.Cmd) (tea.Msg, bool) {
+	done := make(chan tea.Msg, 1)
+	go func() { done <- cmd() }()
+
+	select {
+	case msg := <-done:
+		return msg, true
+	case <-time.After(cmdTimeout):
+		return nil, false
+	}
+}
+
+// render はモデルの描画結果から装飾を取り除いた文字列を返す
+// ANSI を剥がすのは 端末の色能力の判定でゴールデンが揺れないようにするため
+func render(t *testing.T, model tea.Model) string {
+	t.Helper()
+	return ansi.Strip(model.View().Content)
 }
 
 func TestGolden_InitialView(t *testing.T) {
-	tm := newGoldenTestModel(t)
-
-	tm.Send(tea.KeyPressMsg{Text: "q", Code: 'q'})
-
-	out := readFinalOutput(t, tm)
-	teatest.RequireEqualOutput(t, out)
+	requireGolden(t, render(t, newGoldenModel(t)))
 }
 
 func TestGolden_FilterByTyping(t *testing.T) {
-	tm := newGoldenTestModel(t)
+	model := apply(t, newGoldenModel(t),
+		tea.KeyPressMsg{Text: "d", Code: 'd'},
+		tea.KeyPressMsg{Text: "e", Code: 'e'},
+		tea.KeyPressMsg{Text: "v", Code: 'v'},
+	)
 
-	// フィルタの絞り込みは list 内部で非同期コマンド(FilterMatchesMsg)として実行される
-	// tm.Output() は FinalOutput() と同じストリームを消費してしまうため WaitFor では待てず
-	// 完了を待つ短い猶予を置いてから quit する(bubbletea 本家のテストと同じ作法)
-	tm.Type("dev")
-	time.Sleep(100 * time.Millisecond)
-	tm.Send(tea.KeyPressMsg{Text: "q", Code: 'q'})
-
-	out := readFinalOutput(t, tm)
-	teatest.RequireEqualOutput(t, out)
+	requireGolden(t, render(t, model))
 }
 
 func TestGolden_MoveDown(t *testing.T) {
-	tm := newGoldenTestModel(t)
+	model := apply(t, newGoldenModel(t), tea.KeyPressMsg{Code: tea.KeyDown})
 
-	tm.Send(tea.KeyPressMsg{Code: tea.KeyDown})
-	tm.Send(tea.KeyPressMsg{Text: "q", Code: 'q'})
-
-	out := readFinalOutput(t, tm)
-	teatest.RequireEqualOutput(t, out)
+	requireGolden(t, render(t, model))
 }
 
 func TestGolden_EnterSelects(t *testing.T) {
-	tm := newGoldenTestModel(t)
-
 	// カーソルは (unset) から始まるため 2 回下移動して "prod" を選ぶ
-	tm.Send(tea.KeyPressMsg{Code: tea.KeyDown})
-	tm.Send(tea.KeyPressMsg{Code: tea.KeyDown})
-	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	model := apply(t, newGoldenModel(t),
+		tea.KeyPressMsg{Code: tea.KeyDown},
+		tea.KeyPressMsg{Code: tea.KeyDown},
+		tea.KeyPressMsg{Code: tea.KeyEnter},
+	)
 
-	out := readFinalOutput(t, tm)
-	teatest.RequireEqualOutput(t, out)
-
-	final, ok := tm.FinalModel(t).(selectModel)
+	final, ok := model.(selectModel)
 	if !ok {
 		t.Fatal("最終モデルの型変換に失敗")
 	}
@@ -114,12 +180,39 @@ func TestGolden_EnterSelects(t *testing.T) {
 	}
 }
 
-func readFinalOutput(t *testing.T, tm *teatest.TestModel) []byte {
+func TestGolden_QuitAborts(t *testing.T) {
+	model := apply(t, newGoldenModel(t), tea.KeyPressMsg{Text: "q", Code: 'q'})
+
+	final, ok := model.(selectModel)
+	if !ok {
+		t.Fatal("最終モデルの型変換に失敗")
+	}
+	if !final.aborted {
+		t.Fatal("q で中止扱いになっていない")
+	}
+}
+
+// requireGolden は testdata のゴールデンと比較する -update で書き直す
+func requireGolden(t *testing.T, got string) {
 	t.Helper()
 
-	data, err := io.ReadAll(tm.FinalOutput(t))
-	if err != nil {
-		t.Fatalf("最終出力の取得に失敗: %v", err)
+	// パスはテスト名から組み立てるだけで外部入力を含まない
+	path := filepath.Join("testdata", t.Name()+".golden") //nolint:gosec // テスト名由来の固定パス
+	if *updateGolden {
+		if err := os.MkdirAll("testdata", 0o750); err != nil {
+			t.Fatalf("testdata を作成できません: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(got), 0o600); err != nil {
+			t.Fatalf("ゴールデンを更新できません: %v", err)
+		}
+		return
 	}
-	return data
+
+	want, err := os.ReadFile(path) //nolint:gosec // 上と同じくテスト名由来の固定パス
+	if err != nil {
+		t.Fatalf("ゴールデンを読めません(-update で作成できます): %v", err)
+	}
+	if got != string(want) {
+		t.Fatalf("描画がゴールデンと一致しません\n--- got ---\n%s\n--- want ---\n%s", got, string(want))
+	}
 }
