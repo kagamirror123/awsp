@@ -49,6 +49,12 @@ type LoginOptions struct {
 	// UseDeviceCode を true にすると device authorization flow を使う(opt-in)
 	// 既定(false)は Authorization Code + PKCE(D12 2026-09-16 改訂)
 	UseDeviceCode bool
+	// Force を true にすると 有効なセッションが残っていてもログインし直す
+	// 既定(false)は有効なら何もせず即返す(D4)
+	Force bool
+	// NewOIDCClient は sso-session の region から OIDC クライアントを作る
+	// 未指定時は ssooidc.New を使う(テストでフェイクへ差し替えるための注入点)
+	NewOIDCClient func(region string) ssologin.OIDCClient
 }
 
 // LoginDeps は Login が使う外部依存
@@ -117,7 +123,8 @@ func ResolveLoginSession(
 }
 
 // Login は SSO セッションを確立する 既に有効なセッションであれば
-// ログインフローを起こさず即返す(D4) 対象 profile が分かれば identity を添えて返す
+// ログインフローを起こさず即返す(D4) opts.Force を立てるとその場合でもログインし直す
+// 対象 profile が分かれば identity を添えて返す
 func Login(ctx context.Context, session awsconfig.SSOSession, profile string, deps LoginDeps, opts LoginOptions) (LoginResult, error) {
 	cacheDir := opts.CacheDir
 	if cacheDir == "" {
@@ -141,12 +148,18 @@ func Login(ctx context.Context, session awsconfig.SSOSession, profile string, de
 	}
 	eval := ssocache.Evaluate(meta, now, grace)
 
-	if eval.State == ssocache.StateOK {
+	if eval.State == ssocache.StateOK && !opts.Force {
 		expiresAt := eval.ExpiresAt
 		return finishLogin(ctx, session, profile, ssocache.StateOK, &expiresAt, deps)
 	}
 
-	oidcClient := ssooidc.New(ssooidc.Options{Region: session.Region})
+	newClient := opts.NewOIDCClient
+	if newClient == nil {
+		newClient = func(region string) ssologin.OIDCClient {
+			return ssooidc.New(ssooidc.Options{Region: region})
+		}
+	}
+	oidcClient := newClient(session.Region)
 
 	timeout := opts.Timeout
 	if timeout <= 0 {

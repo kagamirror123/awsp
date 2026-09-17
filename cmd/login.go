@@ -16,13 +16,14 @@ func newLoginCmd(opts *rootOptions) *cobra.Command {
 	var timeout time.Duration
 	var noBrowser bool
 	var useDeviceCode bool
+	var force bool
 	var jsonOutput bool
 
 	cmd := &cobra.Command{
 		Use:   "login [profile]",
 		Short: "ブラウザ承認で AWS SSO にログイン(既定: Authorization Code + PKCE)",
 		Example: "  awsp login\n  awsp login dev\n  awsp login --sso-session corp\n  " +
-			"awsp login --timeout 3m\n  awsp login --use-device-code",
+			"awsp login --timeout 3m\n  awsp login --force\n  awsp login --use-device-code",
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -59,6 +60,7 @@ func newLoginCmd(opts *rootOptions) *cobra.Command {
 				AWS: awscli.NewClient(),
 			}, awsp.LoginOptions{
 				Timeout:       timeout,
+				Force:         force,
 				OpenBrowser:   openBrowserOption(noBrowser),
 				Output:        output,
 				UseDeviceCode: useDeviceCode,
@@ -81,6 +83,7 @@ func newLoginCmd(opts *rootOptions) *cobra.Command {
 	cmd.Flags().StringVar(&ssoSessionName, "sso-session", "", "対象の sso-session 名")
 	cmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "承認待ちの上限時間")
 	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "ブラウザを開かず URL(device code なら Code も)の表示だけ行う")
+	cmd.Flags().BoolVar(&force, "force", false, "有効なセッションが残っていてもログインし直す")
 	cmd.Flags().BoolVar(
 		&useDeviceCode,
 		"use-device-code",

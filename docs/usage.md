@@ -61,6 +61,7 @@ $ awsp dev
 | `awsp login [profile]` | ブラウザで承認するだけのログイン。有効なら何もしない |
 | `awsp login --sso-session <name>` | profile ではなく sso-session を指定 |
 | `awsp login --no-browser` | ブラウザを開かず URL を表示するだけ |
+| `awsp login --force` | 有効なセッションが残っていてもログインし直す |
 | `awsp login --use-device-code` | device code 方式(組織側で無効な場合あり) |
 | `awsp login --timeout 5m` | 承認待ちの上限 |
 | `awsp preflight [--grace 8h]` | 1 行と exit code。ok / warning は 0、error / unknown は 1 |

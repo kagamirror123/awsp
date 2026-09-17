@@ -1,10 +1,15 @@
 package awsp
 
 import (
+	"context"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kagamirror123/awsp/internal/awsconfig"
+	"github.com/kagamirror123/awsp/internal/ssocache"
+	"github.com/kagamirror123/awsp/internal/ssologin"
 )
 
 func TestResolveLoginSession_ByProfile(t *testing.T) {
@@ -130,5 +135,59 @@ func TestResolveLoginSession_ProfileAndSessionConflict(t *testing.T) {
 	_, _, err := ResolveLoginSession(LoginTarget{Profile: "dev", SSOSessionName: "corp"}, nil, nil)
 	if err == nil {
 		t.Fatal("profile と --sso-session の同時指定でエラーにならなかった")
+	}
+}
+
+// Force はログイン済みでもフローを起こし直す(--force)
+func TestLogin_ForceStartsFlowEvenWhenSessionIsValid(t *testing.T) {
+	session := awsconfig.SSOSession{Name: "corp", StartURL: "https://example.awsapps.com/start", Region: "us-west-2"}
+	cacheDir := t.TempDir()
+	writeValidToken(t, cacheDir, session.CacheKey())
+
+	t.Run("既定では OIDC を呼ばない", func(t *testing.T) {
+		called := false
+		_, err := Login(context.Background(), session, "", LoginDeps{}, LoginOptions{
+			CacheDir: cacheDir,
+			NewOIDCClient: func(string) ssologin.OIDCClient {
+				called = true
+				return nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("有効なセッションで失敗した: %v", err)
+		}
+		if called {
+			t.Fatal("有効なセッションなのにログインフローを起こしている")
+		}
+	})
+
+	t.Run("Force なら OIDC を呼ぶ", func(t *testing.T) {
+		called := false
+		_, _ = Login(context.Background(), session, "", LoginDeps{}, LoginOptions{
+			CacheDir: cacheDir,
+			Force:    true,
+			NewOIDCClient: func(region string) ssologin.OIDCClient {
+				called = true
+				if region != session.Region {
+					t.Errorf("region が渡っていない: %s", region)
+				}
+				// クライアントを返さずに Start を失敗させる(ネットワークへ出ない)
+				return nil
+			},
+		})
+		if !called {
+			t.Fatal("Force なのにログインフローを起こしていない")
+		}
+	})
+}
+
+// writeValidToken は有効期限内のトークンキャッシュを書く
+func writeValidToken(t *testing.T, cacheDir string, key string) {
+	t.Helper()
+
+	body := `{"startUrl":"https://example.awsapps.com/start","region":"us-west-2",` +
+		`"accessToken":"dummy","expiresAt":"` + time.Now().Add(time.Hour).UTC().Format(time.RFC3339) + `"}`
+	if err := os.WriteFile(ssocache.TokenPath(cacheDir, key), []byte(body), 0o600); err != nil {
+		t.Fatalf("トークンキャッシュを書けません: %v", err)
 	}
 }
