@@ -22,7 +22,7 @@ type Identity struct {
 // SSO セッションの確立(device authorization flow)は internal/ssologin が担い
 // このパッケージは確立済みのセッションを使った identity 確認だけに責務を絞る
 // 以前は SSO ログイン開始を aws CLI の exec(sso login / configure get)へ委譲していたが
-// D12(docs/design.md)で SDK 内製の device flow へ切り替えたため
+// D12(docs/design.md)で SDK 内製の認可フロー(PKCE / device code) へ切り替えたため
 // このパッケージから aws CLI への依存を完全に無くした
 type Client struct{}
 

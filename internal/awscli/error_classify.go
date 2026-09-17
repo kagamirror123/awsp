@@ -16,8 +16,12 @@ func IsAuthRelatedError(err error) bool {
 
 	var apiErr smithy.APIError
 	if errors.As(err, &apiErr) {
-		if hasAuthTokenHint(apiErr.ErrorCode()) {
+		// 認証と認可を区別する。AccessDenied や通信障害では再ログインしない。
+		switch strings.ToLower(apiErr.ErrorCode()) {
+		case "unauthorizedexception", "expiredtoken", "expiredtokenexception", "invalidtoken", "invalidtokenexception", "invalidclienttokenid", "invalid_grant", "invalidgrantexception":
 			return true
+		default:
+			return false
 		}
 	}
 
@@ -35,15 +39,11 @@ func hasAuthTokenHint(value string) bool {
 }
 
 var authErrorHints = []string{
+	"unauthorizedexception",
 	"sso session has expired or is invalid",
-	"failed to refresh cached credentials",
 	"token has expired",
 	"expired token",
 	"invalid token",
 	"invalidtoken",
-	"unauthorized",
-	"not authorized",
-	"access denied",
-	"accessdenied",
 	"ssoproviderinvalidtoken",
 }

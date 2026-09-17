@@ -15,6 +15,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/kagamirror123/awsp/internal/awsp"
 	"github.com/kagamirror123/awsp/internal/ssocache"
 )
@@ -51,6 +52,7 @@ func NewSelectorWithIO(input io.Reader, output io.Writer) *Selector {
 // Select は候補を表示して 1 つ選択する
 func (s *Selector) Select(ctx context.Context, profiles []awsp.Profile) (string, error) {
 	model := newSelectModel(buildItems(profiles, time.Now()))
+	model.setCurrentProfile(os.Getenv("AWS_PROFILE"))
 	program := tea.NewProgram(
 		model,
 		tea.WithContext(ctx),
@@ -91,6 +93,7 @@ func buildItems(profiles []awsp.Profile, now time.Time) []list.Item {
 type profileItem struct {
 	profile awsp.Profile
 	now     time.Time
+	current bool
 }
 
 func (i profileItem) FilterValue() string {
@@ -106,7 +109,11 @@ func (i profileItem) FilterValue() string {
 }
 
 func (i profileItem) Title() string {
-	return fmt.Sprintf("%s %s  %s", stateMarker(i.profile), i.profile.Name, remainingLabel(i.profile, i.now))
+	current := ""
+	if i.current {
+		current = "● "
+	}
+	return fmt.Sprintf("%s%s %s  %s", current, stateMarker(i.profile), i.profile.Name, remainingLabel(i.profile, i.now))
 }
 
 func (i profileItem) Description() string {
@@ -114,17 +121,21 @@ func (i profileItem) Description() string {
 }
 
 type listPaneSize struct {
-	leftWidth  int
-	rightWidth int
-	bodyHeight int
+	leftWidth   int
+	rightWidth  int
+	leftHeight  int
+	rightHeight int
+	stacked     bool
 }
 
 type selectModel struct {
-	list     list.Model
-	selected string
-	aborted  bool
-	width    int
-	height   int
+	list         list.Model
+	selected     string
+	aborted      bool
+	width        int
+	height       int
+	detailOffset int
+	location     *time.Location
 }
 
 func newSelectModel(items []list.Item) selectModel {
@@ -145,6 +156,7 @@ func newSelectModel(items []list.Item) selectModel {
 	filterStyles.Focused.Text = lipgloss.NewStyle().Foreground(lipgloss.Color("230"))
 	filterStyles.Blurred.Prompt = filterStyles.Focused.Prompt
 	filterStyles.Blurred.Text = filterStyles.Focused.Text
+	filterStyles.Cursor.Blink = false
 	filterStyles.Cursor.Color = lipgloss.Color("205")
 	listModel.FilterInput.SetStyles(filterStyles)
 
@@ -157,9 +169,10 @@ func newSelectModel(items []list.Item) selectModel {
 	listModel.KeyMap.CursorDown.SetHelp("↓", "down")
 
 	model := selectModel{
-		list:   listModel,
-		width:  120,
-		height: 30,
+		list:     listModel,
+		location: time.Local,
+		width:    120,
+		height:   30,
 	}
 	model.applyLayout(120, 30)
 	return model
@@ -198,7 +211,7 @@ func (d profileDelegate) Render(writer io.Writer, model list.Model, index int, i
 	}
 
 	line := marker + profile.Title()
-	_, _ = fmt.Fprint(writer, lineStyle.Render(line))
+	_, _ = fmt.Fprint(writer, lineStyle.Render(ansi.Truncate(line, max(1, model.Width()-lineStyle.GetHorizontalFrameSize()), "…")))
 }
 
 func (m selectModel) Init() tea.Cmd {
@@ -212,20 +225,40 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		before := selectedName(m.list.SelectedItem())
 		if cmd, handled := m.handleKeyInput(typed); handled {
+			if before != selectedName(m.list.SelectedItem()) {
+				m.detailOffset = 0
+			}
 			return m, cmd
 		}
 	}
 
+	before := selectedName(m.list.SelectedItem())
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
+	if before != selectedName(m.list.SelectedItem()) {
+		m.detailOffset = 0
+	}
 	return m, cmd
 }
 
 func (m *selectModel) handleKeyInput(msg tea.KeyPressMsg) (tea.Cmd, bool) {
-	if isQuitKey(msg) {
+	if isQuitKey(msg) && (msg.String() == "ctrl+c" || !m.list.SettingFilter()) {
 		m.aborted = true
 		return tea.Quit, true
+	}
+
+	if msg.String() == "pgdown" || msg.String() == "pgup" {
+		size := resolvePaneSize(m.width, m.height)
+		lines := m.detailLines(size.rightWidth - 4)
+		page := max(1, size.rightHeight-3)
+		step := page
+		if msg.String() == "pgup" {
+			step = -step
+		}
+		m.detailOffset = min(max(0, m.detailOffset+step), max(0, len(lines)-page))
+		return nil, true
 	}
 
 	// フィルタ中に移動キーが押されたら入力モードを抜けて移動へ渡す
@@ -278,26 +311,62 @@ func (m *selectModel) startFiltering(msg tea.KeyPressMsg) tea.Cmd {
 
 func (m selectModel) View() tea.View {
 	size := resolvePaneSize(m.width, m.height)
-	help := helpStyle.Render("↑↓: move  Enter: select  type or /: filter  Esc: clear  q: quit")
-	left := panelStyle.
-		Width(size.leftWidth).
-		Height(size.bodyHeight).
-		Render(m.list.View())
-	right := panelStyle.
-		Width(size.rightWidth).
-		Height(size.bodyHeight).
-		Render(m.renderDetail())
+	left := renderPanel(m.list.View(), size.leftWidth, size.leftHeight)
+	lines := m.detailLines(size.rightWidth - 4)
+	page := max(1, size.rightHeight-3)
+	offset := min(m.detailOffset, max(0, len(lines)-page))
+	detail := strings.Join(lines[offset:min(len(lines), offset+page)], "\n")
+	detail = lipgloss.NewStyle().Height(page).Render(detail)
+	if len(lines) > page {
+		detail += "\n" + detailMutedStyle.Render(fmt.Sprintf("PgUp/PgDn  %d–%d / %d", offset+1, min(len(lines), offset+page), len(lines)))
+	}
+	right := renderPanel(detail, size.rightWidth, size.rightHeight)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-
+	if size.stacked {
+		body = left + "\n" + right
+	}
 	content := strings.Join([]string{
-		titleStyle.Render("☁️  awsp profile selector"),
-		help,
+		titleStyle.Render("☁️  awsp  ● 現在の profile"),
+		helpStyle.Render("↑↓ 移動  Enter 決定  / 検索  q 終了"),
 		body,
 	}, "\n")
-
 	view := tea.NewView(content)
 	view.AltScreen = true
 	return view
+}
+
+// renderPanel は枠を含めたサイズを指定する。長い値は詳細側で折り返す。
+func renderPanel(content string, width, height int) string {
+	return panelStyle.Width(width).Height(height).
+		MaxWidth(width).MaxHeight(height).Render(content)
+}
+
+func (m selectModel) detailLines(width int) []string {
+	return strings.Split(ansi.Hardwrap(m.renderDetail(), max(1, width), false), "\n")
+}
+
+// setCurrentProfile は環境から渡された現在値を表示し、初期カーソルを合わせる。
+func (m *selectModel) setCurrentProfile(name string) {
+	if name == "" {
+		name = UnsetOption
+	}
+	items := m.list.Items()
+	selected := 0
+	for i, item := range items {
+		p := item.(profileItem)
+		p.current = p.profile.Name == name
+		items[i] = p
+		if p.current {
+			selected = i
+		}
+	}
+	m.list.SetItems(items)
+	m.list.Select(selected)
+}
+
+func selectedName(item list.Item) string {
+	p, _ := currentProfile(item)
+	return p.Name
 }
 
 func (m selectModel) renderDetail() string {
@@ -324,20 +393,25 @@ func (m selectModel) renderDetail() string {
 		renderDetailLine("🔐", "name", profile.Name),
 		renderDetailLine("🌏", "region", fallbackValue(profile.Region)),
 		renderDetailLine("🧾", "output", fallbackValue(profile.Output)),
-		renderDetailLine("🧩", "sso session", fallbackValue(profile.SSOSession)),
-		renderDetailLine("🏢", "account id", fallbackValue(profile.SSOAccountID)),
-		renderDetailLine("🛡", "role name", fallbackValue(profile.SSORoleName)),
+		renderDetailLine("🧩", "session", fallbackValue(profile.SSOSession)),
+		renderDetailLine("🏢", "account", fallbackValue(profile.SSOAccountID)),
+		renderDetailLine("🛡", "role", fallbackValue(profile.SSORoleName)),
 		renderDetailLine("🎭", "role arn", fallbackValue(profile.RoleARN)),
 		renderDetailLine("🔗", "source", fallbackValue(profile.SourceProfile)),
 		"",
-		renderDetailLine(stateMarker(profile), "session state", sessionStateLabel(profile)),
-		renderDetailLine("⏳", "session expires", fallbackTime(profile.SessionExpiresAt)),
-		renderDetailLine("🕘", "last used", fallbackTime(profile.LastUsedAt)),
-		renderDetailLine("🔑", "credential expires", fallbackTime(profile.CredentialExpiresAt)),
+		renderDetailLine(stateMarker(profile), "state", sessionStateLabel(profile)),
+		renderDetailLine("⏳", "SSO expires", fallbackTime(profile.SessionExpiresAt, m.location)),
+		renderDetailLine("🕘", "fetched", fallbackTime(profile.LastUsedAt, m.location)),
+		renderDetailLine("🔑", "cred expires", fallbackTime(profile.CredentialExpiresAt, m.location)),
 		"",
 		detailMutedStyle.Render("接続時は caller identity を取得して表示"),
 	}
 
+	if len(profile.Diagnostics) > 0 {
+		body = append(body, "", "⚠ キャッシュの読み取りエラー")
+		body = append(body, profile.Diagnostics...)
+		body = append(body, "キャッシュの内容・アクセス権を確認してください")
+	}
 	return strings.Join(body, "\n")
 }
 
@@ -348,12 +422,12 @@ func fallbackValue(value string) string {
 	return value
 }
 
-// fallbackTime は時刻を RFC3339 で表示する 未算出/該当なしは "-"(D9)
-func fallbackTime(t *time.Time) string {
+// fallbackTime は時刻をローカル時刻の短い形式で表示する 未算出/該当なしは "-"(D9)
+func fallbackTime(t *time.Time, location *time.Location) string {
 	if t == nil {
 		return "-"
 	}
-	return t.Format(time.RFC3339)
+	return t.In(location).Format("01/02 15:04 MST")
 }
 
 // sessionStateLabel は sso-session の状態を文字列にする SSO を使わない profile は "-"(D9)
@@ -399,10 +473,16 @@ func remainingLabel(p awsp.Profile, now time.Time) string {
 }
 
 func (m *selectModel) applyLayout(width int, height int) {
+	if width <= 0 {
+		width = 120
+	}
+	if height <= 0 {
+		height = 30
+	}
+	m.width, m.height = width, height
+	m.detailOffset = 0
 	size := resolvePaneSize(width, height)
-	m.width = width
-	m.height = height
-	m.list.SetSize(maxInt(14, size.leftWidth-4), maxInt(8, size.bodyHeight-2))
+	m.list.SetSize(max(1, size.leftWidth-4), max(1, size.leftHeight-2))
 }
 
 func resolvePaneSize(width int, height int) listPaneSize {
@@ -412,25 +492,18 @@ func resolvePaneSize(width int, height int) listPaneSize {
 	if height <= 0 {
 		height = 30
 	}
-
-	bodyHeight := maxInt(12, height-3)
-	leftWidth := maxInt(52, width/2)
-	rightWidth := width - leftWidth - 1
-
-	const minRightWidth = 46
-	if rightWidth < minRightWidth {
-		rightWidth = minRightWidth
-		leftWidth = width - rightWidth - 1
+	body := max(4, height-2)
+	if width < 96 {
+		listHeight := min(9, max(4, body/3))
+		return listPaneSize{
+			leftWidth: width, rightWidth: width,
+			leftHeight: listHeight, rightHeight: body - listHeight, stacked: true,
+		}
 	}
-	if leftWidth < 42 {
-		leftWidth = 42
-		rightWidth = maxInt(30, width-leftWidth-1)
-	}
-
+	left := width * 2 / 5
 	return listPaneSize{
-		leftWidth:  leftWidth,
-		rightWidth: rightWidth,
-		bodyHeight: bodyHeight,
+		leftWidth: left, rightWidth: width - left,
+		leftHeight: body, rightHeight: body,
 	}
 }
 
@@ -444,7 +517,7 @@ func currentProfile(item list.Item) (awsp.Profile, bool) {
 
 func renderDetailLine(icon string, key string, value string) string {
 	paddedIcon := padDisplayRight(icon, 2)
-	paddedKey := padDisplayRight(key, 19)
+	paddedKey := padDisplayRight(key, 12)
 	return fmt.Sprintf("%s %s %s", paddedIcon, detailKeyStyle.Render(paddedKey), value)
 }
 
@@ -472,7 +545,7 @@ func shouldStartFiltering(msg tea.KeyPressMsg, filtering bool) bool {
 
 	if utf8.RuneCountInString(key.Text) == 1 {
 		switch key.Text {
-		case "g", "G", "q", "/":
+		case "q", "/":
 			return false
 		}
 	}
@@ -502,13 +575,6 @@ func isQuitKey(msg tea.KeyPressMsg) bool {
 	default:
 		return false
 	}
-}
-
-func maxInt(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 var (

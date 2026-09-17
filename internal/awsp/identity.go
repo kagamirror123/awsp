@@ -27,6 +27,12 @@ type Identity struct {
 	ARN string `json:"arn"`
 }
 
+// IdentityReport は CLI/MCP 共通の whoami 出力。identity はフラットに保つ。
+type IdentityReport struct {
+	SchemaVersion int `json:"schemaVersion"`
+	Identity
+}
+
 // CurrentReport は `awsp current --json` の出力
 type CurrentReport struct {
 	// SchemaVersion は出力形式のバージョン

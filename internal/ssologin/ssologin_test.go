@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -563,7 +564,14 @@ func TestPKCE_StartAndWait_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("コールバックへの GET に失敗: %v", err)
 	}
+	body, err := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "承認を受け付けました") || strings.Contains(string(body), "認証が完了しました") {
+		t.Fatal("トークン交換前の表示が完了を断言しています")
+	}
 
 	result, err := flow.Wait(context.Background())
 	if err != nil {
@@ -615,7 +623,14 @@ func TestPKCE_StateMismatchFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("コールバックへの GET に失敗: %v", err)
 	}
+	body, err := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusBadRequest || strings.Contains(string(body), "承認を受け付けました") {
+		t.Fatalf("state 不一致で成功を表示しました: status=%d", resp.StatusCode)
+	}
 
 	_, err = flow.Wait(context.Background())
 	if err == nil {
@@ -638,7 +653,7 @@ func TestPKCE_ErrorParamFails(t *testing.T) {
 	redirectURI := callbackRedirectURI(t, flow)
 
 	//nolint:gosec // テスト用のローカルコールバックへの GET(固定 127.0.0.1)
-	resp, err := http.Get(redirectURI + "?error=access_denied")
+	resp, err := http.Get(redirectURI + "?error=access_denied&state=" + url.QueryEscape(flow.state))
 	if err != nil {
 		t.Fatalf("コールバックへの GET に失敗: %v", err)
 	}

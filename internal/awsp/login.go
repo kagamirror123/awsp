@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
+	"github.com/kagamirror123/awsp/internal/awscli"
 	"github.com/kagamirror123/awsp/internal/awsconfig"
 	"github.com/kagamirror123/awsp/internal/ssocache"
 	"github.com/kagamirror123/awsp/internal/ssologin"
@@ -16,6 +17,15 @@ import (
 
 // LoginResult は `awsp login` の JSON 出力
 type LoginResult struct {
+	// Status は ok または pending。Phase は pending のとき starting または authorizing。
+	Status string `json:"status"`
+	Phase  string `json:"phase,omitempty"`
+	// Method と URL は承認待ちのときだけ設定する。UserCode は device code 方式のみ。
+	Method           string `json:"method,omitempty"`
+	AuthorizationURL string `json:"authorizationUrl,omitempty"`
+	UserCode         string `json:"userCode,omitempty"`
+	// Message は次の操作の案内
+	Message string `json:"message"`
 	// SchemaVersion は出力形式のバージョン
 	SchemaVersion int `json:"schemaVersion"`
 	// Session はログイン対象の sso-session 名 legacy 形式では start URL
@@ -36,11 +46,15 @@ type LoginTarget struct {
 
 // LoginOptions は Login の挙動を制御する
 type LoginOptions struct {
+	// Now はキャッシュの判定時刻。未指定時は time.Now。
+	Now func() time.Time
+	// OnStarted は認可 URL が確定した後に呼ばれる。MCP の承認待ち通知に使う。
+	OnStarted func(*ssologin.Flow, ssocache.EvaluationState)
 	// CacheDir は sso/cache のディレクトリ 未指定時は ssocache.DefaultCacheDir()
 	CacheDir string
 	// Grace は失効後に自動更新を見込む猶予時間(D18 既定 8h)
 	Grace time.Duration
-	// Timeout は承認待ちの上限時間(D13 既定 5m)
+	// Timeout は開始・承認待ち・identity 確認全体の上限時間(既定 5m)
 	Timeout time.Duration
 	// OpenBrowser は認可 URL を開く関数 未指定時は OS 標準のオープンコマンド
 	OpenBrowser func(url string) error
@@ -123,7 +137,7 @@ func ResolveLoginSession(
 }
 
 // Login は SSO セッションを確立する 既に有効なセッションであれば
-// ログインフローを起こさず即返す(D4) opts.Force を立てるとその場合でもログインし直す
+// identity を確認して返す。認証エラーまたは opts.Force の場合はログインし直す
 // 対象 profile が分かれば identity を添えて返す
 func Login(ctx context.Context, session awsconfig.SSOSession, profile string, deps LoginDeps, opts LoginOptions) (LoginResult, error) {
 	cacheDir := opts.CacheDir
@@ -140,17 +154,33 @@ func Login(ctx context.Context, session awsconfig.SSOSession, profile string, de
 		grace = 8 * time.Hour
 	}
 
-	now := time.Now()
-	tokenPath := ssocache.TokenPath(cacheDir, session.CacheKey())
-	meta, err := ssocache.ReadTokenMeta(tokenPath)
-	if err != nil {
-		return LoginResult{}, err
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
 	}
-	eval := ssocache.Evaluate(meta, now, grace)
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
-	if eval.State == ssocache.StateOK && !opts.Force {
-		expiresAt := eval.ExpiresAt
-		return finishLogin(ctx, session, profile, ssocache.StateOK, &expiresAt, deps)
+	now := time.Now()
+	if opts.Now != nil {
+		now = opts.Now()
+	}
+	state := ssocache.StateUnknown
+	if !opts.Force {
+		meta, err := ssocache.ReadTokenMeta(ssocache.TokenPath(cacheDir, session.CacheKey()))
+		eval := evaluateSession(session, meta, now, grace)
+		state = eval.State
+		if err != nil {
+			// 壊れたキャッシュも通常のログインで修復できる。保存時のエラーは別途返す。
+			state = ssocache.StateError
+		} else if state == ssocache.StateOK {
+			result, err := finishLogin(waitCtx, session, profile, state, &eval.ExpiresAt, deps)
+			if err == nil || !awscli.IsAuthRelatedError(err) {
+				return result, err
+			}
+			// ローカルの期限内でも失効・無効化されていれば再認証する。
+			state = ssocache.StateError
+		}
 	}
 
 	newClient := opts.NewOIDCClient
@@ -161,31 +191,32 @@ func Login(ctx context.Context, session awsconfig.SSOSession, profile string, de
 	}
 	oidcClient := newClient(session.Region)
 
-	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = 5 * time.Minute
-	}
-	waitCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	flow, err := ssologin.Start(waitCtx, session, ssologin.Options{
+	// 登録 API が応答しない場合も、承認待ちとは別の短い上限で終了させる。
+	startCtx, cancelStart := context.WithTimeout(waitCtx, 30*time.Second)
+	flow, err := ssologin.Start(startCtx, session, ssologin.Options{
 		Client:        oidcClient,
 		CacheDir:      cacheDir,
 		OpenBrowser:   opts.OpenBrowser,
 		UseDeviceCode: opts.UseDeviceCode,
 	})
+	cancelStart()
 	if err != nil {
 		return LoginResult{}, fmt.Errorf("ログインの開始に失敗: %w", err)
 	}
 
+	if opts.OnStarted != nil {
+		opts.OnStarted(flow, state)
+	}
 	printLoginPrompt(opts.Output, flow)
 
-	result, err := flow.Wait(waitCtx)
+	flowCtx, cancelFlow := context.WithDeadline(waitCtx, flow.ExpiresAt)
+	defer cancelFlow()
+	result, err := flow.Wait(flowCtx)
 	if err != nil {
 		return LoginResult{}, err
 	}
 
-	return finishLogin(ctx, session, profile, ssocache.StateOK, &result.ExpiresAt, deps)
+	return finishLogin(waitCtx, session, profile, ssocache.StateOK, &result.ExpiresAt, deps)
 }
 
 func finishLogin(
@@ -197,27 +228,31 @@ func finishLogin(
 	deps LoginDeps,
 ) (LoginResult, error) {
 	result := LoginResult{
+		Status:        "ok",
+		Message:       "SSO セッションは有効です",
 		SchemaVersion: 1,
 		Session:       displayNameForSession(session),
 		State:         state,
 		ExpiresAt:     expiresAt,
 	}
 
-	if profile == "" || deps.AWS == nil {
+	return WithLoginIdentity(ctx, deps.AWS, profile, result)
+}
+
+// WithLoginIdentity は共有したセッション結果に呼び出し元の profile の identity を添える。
+func WithLoginIdentity(ctx context.Context, client AWSIdentityClient, profile string, result LoginResult) (LoginResult, error) {
+	if result.Identity != nil && result.Identity.Profile == profile {
 		return result, nil
 	}
-
-	identity, err := deps.AWS.CallerIdentity(ctx, profile)
+	result.Identity = nil
+	if profile == "" || client == nil {
+		return result, nil
+	}
+	identity, err := Whoami(ctx, client, profile)
 	if err != nil {
 		return result, fmt.Errorf("ログイン後の identity 取得に失敗: %w", err)
 	}
-
-	result.Identity = &Identity{
-		Profile: profile,
-		Account: identity.Account,
-		UserID:  identity.UserID,
-		ARN:     identity.ARN,
-	}
+	result.Identity = &identity
 	return result, nil
 }
 
@@ -234,7 +269,7 @@ func printLoginPrompt(w io.Writer, flow *ssologin.Flow) {
 		_, _ = fmt.Fprintln(w, "  ブラウザで承認すると自動で戻ります")
 	}
 	if flow.BrowserErr != nil {
-		_, _ = fmt.Fprintln(w, "ブラウザの自動起動に失敗しました。上記 URL を手動で開いてください")
+		_, _ = fmt.Fprintln(w, "ブラウザの自動起動を確認できませんでした。上記 URL を手動で開いてください")
 	}
 	_, _ = fmt.Fprintln(w)
 }

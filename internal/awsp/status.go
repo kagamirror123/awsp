@@ -29,6 +29,8 @@ type StatusReport struct {
 
 // SessionStatus は 1 つの sso-session の認証状態
 type SessionStatus struct {
+	// Diagnostic はキャッシュを読み取れなかった理由
+	Diagnostic string `json:"diagnostic,omitempty"`
 	// Name は sso-session の名前 legacy 形式では空文字
 	Name string `json:"name"`
 	// StartURL は sso_start_url
@@ -80,11 +82,7 @@ func BuildStatusReport(profiles []awsconfig.Profile, sessions []awsconfig.SSOSes
 
 	statuses := make([]SessionStatus, 0, len(groups))
 	for _, group := range groups {
-		status, err := buildSessionStatus(cacheDir, group, now, opts.Grace)
-		if err != nil {
-			return StatusReport{}, err
-		}
-		statuses = append(statuses, status)
+		statuses = append(statuses, buildSessionStatus(cacheDir, group, now, opts.Grace))
 	}
 
 	overall := ssocache.StateOK
@@ -125,11 +123,16 @@ func PreflightLine(report StatusReport) (string, int) {
 	case ssocache.StateWarning:
 		elapsed := -safeDuration(group[0].RemainingSeconds)
 		return fmt.Sprintf(
-			"awsp preflight: AWS SSO 失効(%s %s 前)。使用時に自動更新される見込みです",
-			names, formatDuration(elapsed),
+			"awsp preflight: AWS SSO 失効(%s %s 前)。使用時に自動更新を試みます。認証エラーなら '%s' を実行してください",
+			names, formatDuration(elapsed), hint,
 		), exitCode
 
 	case ssocache.StateError:
+		for _, session := range group {
+			if session.Diagnostic != "" {
+				return fmt.Sprintf("awsp preflight: AWS SSO キャッシュエラー(%s)。'%s' で再ログインしてください。詳細は 'awsp status'", names, hint), exitCode
+			}
+		}
 		elapsed := -safeDuration(group[0].RemainingSeconds)
 		return fmt.Sprintf(
 			"awsp preflight: AWS SSO 失効(%s %s 前)。AWS を使う前に '%s' を実行してください",
@@ -195,13 +198,10 @@ func distinctSessions(profiles []awsconfig.Profile, sessions []awsconfig.SSOSess
 	return result
 }
 
-func buildSessionStatus(cacheDir string, group sessionGroup, now time.Time, grace time.Duration) (SessionStatus, error) {
+func buildSessionStatus(cacheDir string, group sessionGroup, now time.Time, grace time.Duration) SessionStatus {
 	tokenPath := ssocache.TokenPath(cacheDir, group.session.CacheKey())
 	meta, err := ssocache.ReadTokenMeta(tokenPath)
-	if err != nil {
-		return SessionStatus{}, err
-	}
-	eval := ssocache.Evaluate(meta, now, grace)
+	eval := evaluateSession(group.session, meta, now, grace)
 
 	profiles := group.profiles
 	if profiles == nil {
@@ -217,14 +217,18 @@ func buildSessionStatus(cacheDir string, group sessionGroup, now time.Time, grac
 		Profiles: profiles,
 	}
 
-	if eval.State != ssocache.StateUnknown {
+	if err != nil {
+		status.State = ssocache.StateError
+		status.Diagnostic = err.Error()
+		status.Summary = fmt.Sprintf("キャッシュを読めません。'%s' で再ログインしてください", loginHintForSession(group.session))
+	} else if eval.State != ssocache.StateUnknown {
 		expiresAt := eval.ExpiresAt
 		status.ExpiresAt = &expiresAt
 		remainingSeconds := int64(eval.Remaining.Seconds())
 		status.RemainingSeconds = &remainingSeconds
 	}
 
-	return status, nil
+	return status
 }
 
 func summarizeSession(session awsconfig.SSOSession, eval ssocache.Evaluation) string {
@@ -234,7 +238,7 @@ func summarizeSession(session awsconfig.SSOSession, eval ssocache.Evaluation) st
 	case ssocache.StateOK:
 		return fmt.Sprintf("有効(残り %s)", formatDuration(eval.Remaining))
 	case ssocache.StateWarning:
-		return fmt.Sprintf("失効(%s 前)。使用時に自動更新される見込み", formatDuration(-eval.Remaining))
+		return fmt.Sprintf("失効(%s 前)。使用時に自動更新を試みます。認証エラーなら '%s' を実行してください", formatDuration(-eval.Remaining), hint)
 	case ssocache.StateError:
 		return fmt.Sprintf("失効(%s 前)。'%s' を実行してください", formatDuration(-eval.Remaining), hint)
 	default: // unknown
@@ -349,4 +353,12 @@ func formatDuration(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
+}
+
+// evaluateSession は自動更新に対応しない legacy 設定を期限切れとして扱う。
+func evaluateSession(session awsconfig.SSOSession, meta ssocache.TokenMeta, now time.Time, grace time.Duration) ssocache.Evaluation {
+	if session.IsLegacy() {
+		meta.HasRefreshToken = false
+	}
+	return ssocache.Evaluate(meta, now, grace)
 }

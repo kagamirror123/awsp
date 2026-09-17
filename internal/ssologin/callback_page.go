@@ -127,13 +127,13 @@ p{margin:0; font-size:14.5px; line-height:1.75; color:var(--muted); text-wrap:pr
 </body>
 </html>`
 
-// successCallbackPage は認可が完了したときの画面
+// successCallbackPage は認可応答を受け付けた画面。トークン交換・保存の成功はまだ確定していない。
 func successCallbackPage() string {
 	return callbackPage(
 		callbackAccentSuccess,
 		callbackIconCheck,
-		"認証が完了しました",
-		"ターミナルに戻って作業を続けてください。",
+		"承認を受け付けました",
+		"ログイン処理を続けています。ターミナルに戻り、完了したことを確認してください。",
 		"",
 	)
 }

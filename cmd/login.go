@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/kagamirror123/awsp/internal/awsconfig"
 
 	"github.com/kagamirror123/awsp/internal/awscli"
 	"github.com/kagamirror123/awsp/internal/awsp"
@@ -11,7 +14,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type loginRunner func(context.Context, awsconfig.SSOSession, string, awsp.LoginDeps, awsp.LoginOptions) (awsp.LoginResult, error)
+
 func newLoginCmd(opts *rootOptions) *cobra.Command {
+	return newLoginCmdWithRunner(opts, awsp.Login)
+}
+
+// newLoginCmdWithRunner はコマンドの出力契約をネットワークなしで検証するため実行処理を注入する。
+func newLoginCmdWithRunner(opts *rootOptions, runLogin loginRunner) *cobra.Command {
 	var ssoSessionName string
 	var timeout time.Duration
 	var noBrowser bool
@@ -52,11 +62,11 @@ func newLoginCmd(opts *rootOptions) *cobra.Command {
 			}
 
 			output := ui.NewWriter(cmd.OutOrStdout())
-			if opts.shell {
+			if opts.shell || jsonOutput {
 				output = ui.NewWriter(cmd.ErrOrStderr())
 			}
 
-			result, err := awsp.Login(cmd.Context(), session, profile, awsp.LoginDeps{
+			result, err := runLogin(cmd.Context(), session, profile, awsp.LoginDeps{
 				AWS: awscli.NewClient(),
 			}, awsp.LoginOptions{
 				Timeout:       timeout,

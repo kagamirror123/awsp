@@ -25,15 +25,17 @@ args = ["mcp"]
 | `auth_status` | SSO セッションの有効・失効。作業の最初に呼ぶ | 使わない |
 | `list_profiles` | profile 一覧と account / role / 認証状態 | 使わない |
 | `whoami` | 指定 profile の caller identity。自動ログインしない | STS |
-| `login` | ログインを起こし、人がブラウザで承認するまで待ってから返る | SSO OIDC |
+| `login` | ログインを起こし、人がブラウザで承認するまで待ってから返る | SSO OIDC、profile 指定時は STS |
 
 出力は CLI の `--json` と同じ型で、outputSchema 付きです。トークン値や credentials はどのツールの結果にも含まれません。
 
 ### `login` の挙動
 
-- 既に有効なら何もせず即 `status: "ok"`
-- ブラウザを開けたら承認完了まで待つ(既定 5 分、`timeout_seconds` で最大 15 分)
+- 期限内なら profile 指定時に STS で確認して `status: "ok"`。認証エラーなら再ログインし、通信障害や権限不足では元のエラーを返す
+- 開始処理を含めて承認完了まで待つ(既定 5 分、`timeout_seconds` で最大 15 分)。開始 API 自体は 30 秒で打ち切る
 - ブラウザを開けなかったか時間切れなら `status: "pending"` と認可 URL を返す。人が URL を開いて承認し、エージェントがもう一度 `login` を呼ぶと同じフローに合流して完了する
+- 開始待ちのまま期限を迎えた場合は `status: "pending", phase: "starting"` を返す。この時点では URL はない。再呼び出しで進捗を確認する。URL 確定後は `phase: "authorizing"`
+- 共有フローは呼び出し側の期限では停止せず、サーバー終了、認可期限、または内部上限 15 分で終了する
 - 同じ sso-session への同時呼び出しは 1 つのフローに合流する。二重にブラウザは開かない
 - `use_device_code: true` で device code 方式に切り替え可(組織側で無効な場合あり)
 

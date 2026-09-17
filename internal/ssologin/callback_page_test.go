@@ -13,7 +13,7 @@ func TestCallbackPages(t *testing.T) {
 		wantHeading string
 		wantAccent  string
 	}{
-		"success":    {successCallbackPage(), "認証が完了しました", callbackAccentSuccess},
+		"success":    {successCallbackPage(), "承認を受け付けました", callbackAccentSuccess},
 		"failure":    {failureCallbackPage(), "認証に失敗しました", callbackAccentError},
 		"unexpected": {unexpectedCallbackPage(), "想定外のリクエストです", callbackAccentNeutral},
 	}

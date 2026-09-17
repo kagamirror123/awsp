@@ -8,11 +8,9 @@ import (
 	"io"
 	"log/slog"
 	"slices"
-	"time"
 
 	"github.com/kagamirror123/awsp/internal/awscli"
 	"github.com/kagamirror123/awsp/internal/awsconfig"
-	"github.com/kagamirror123/awsp/internal/ssocache"
 	"github.com/kagamirror123/awsp/internal/ui"
 )
 
@@ -20,36 +18,15 @@ const unsetSelection = "(unset)"
 
 // Profile は選択対象の AWS プロファイル情報
 // インタラクティブ表示と検証で利用する
-type Profile struct {
-	Name          string
-	Region        string
-	Output        string
-	SSOSession    string
-	SSOStartURL   string
-	SSORegion     string
-	SSOAccountID  string
-	SSORoleName   string
-	RoleARN       string
-	SourceProfile string
-
-	// SessionState はこの profile が属する sso-session の状態(D9)
-	// SSO を使わない profile では空文字のまま
-	SessionState ssocache.EvaluationState
-	// SessionExpiresAt は sso-session のトークン有効期限 未算出/該当なしは nil
-	SessionExpiresAt *time.Time
-	// LastUsedAt は ~/.aws/cli/cache の最終使用時刻(mtime) 未算出/該当なしは nil
-	LastUsedAt *time.Time
-	// CredentialExpiresAt は ~/.aws/cli/cache のロール認証情報の有効期限 未算出/該当なしは nil
-	CredentialExpiresAt *time.Time
-}
+type Profile = ProfileInfo
 
 // IsSSO は SSO 関連設定があるかを返す(TUI の状態マーク切り分けに使う D9)
-func (p Profile) IsSSO() bool {
+func (p ProfileInfo) IsSSO() bool {
 	return p.SSOSession != "" || p.SSOStartURL != "" || p.SSOAccountID != "" || p.SSORoleName != ""
 }
 
 // toConfigProfile は awsconfig.ResolveSession に渡すための変換
-func (p Profile) toConfigProfile() awsconfig.Profile {
+func (p ProfileInfo) toConfigProfile() awsconfig.Profile {
 	return awsconfig.Profile{
 		Name:          p.Name,
 		Region:        p.Region,

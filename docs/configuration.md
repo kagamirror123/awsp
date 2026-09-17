@@ -49,7 +49,7 @@ source_profile = base
 |---|---|---|
 | `~/.aws/config` | 読む | profile と sso-session |
 | `~/.aws/sso/cache/<sha1(sso-session 名)>.json` | 読む・書く | 期限と refresh token の有無を読む。ログイン時に aws CLI 互換の形式で書く |
-| `~/.aws/cli/cache/*.json` | 読む | 一覧の最終使用時刻とロール認証情報の期限 |
+| `~/.aws/cli/cache/*.json` | 読む | 一覧の認証情報取得時刻とロール認証情報の期限 |
 
 トークン値・credentials は読み取っても出力せず、ログにも残しません。
 

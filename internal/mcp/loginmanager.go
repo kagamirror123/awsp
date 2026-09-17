@@ -3,13 +3,15 @@ package mcp
 import (
 	"sync"
 
+	"github.com/kagamirror123/awsp/internal/awsp"
+	"github.com/kagamirror123/awsp/internal/ssocache"
 	"github.com/kagamirror123/awsp/internal/ssologin"
 )
 
 // loginFlowEntry は 1 つの sso-session に対する進行中(または直前に完了した)ログインフローの状態
 //
-// ready は Start の結果(flow または startErr)が確定した時点で close する
-// done は flow.Wait の結果(result または waitErr)が確定した時点で close する
+// ready は認可 URL(flow と state)、または処理全体の結果が確定した時点で close する
+// done は Login の結果(result と err)が確定した時点で close する
 // close するまでは受信側をブロックさせる合図として使うだけで
 // フィールドの読み書きそのものは「書き込み → close」「close の受信 → 読み込み」の順序を
 // 必ず守ることで排他無しに安全にする(Go のメモリモデル上 close は receive に対して happens-before になる)
@@ -17,11 +19,12 @@ type loginFlowEntry struct {
 	ready chan struct{}
 	done  chan struct{}
 
-	flow     *ssologin.Flow
-	startErr error
+	flow  *ssologin.Flow
+	state ssocache.EvaluationState
 
-	result  ssologin.Result
-	waitErr error
+	profile string
+	result  awsp.LoginResult
+	err     error
 }
 
 // loginManager は sso-session の CacheKey ごとに進行中のログインフローを高々 1 つに保つ

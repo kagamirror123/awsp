@@ -9,21 +9,23 @@ import (
 
 // ProfileInfo は `awsp list --json` の 1 profile 分の情報
 type ProfileInfo struct {
-	Name          string `json:"name"`
-	Region        string `json:"region,omitempty"`
-	Output        string `json:"output,omitempty"`
-	SSOSession    string `json:"ssoSession,omitempty"`
-	SSOStartURL   string `json:"ssoStartUrl,omitempty"`
-	SSORegion     string `json:"ssoRegion,omitempty"`
-	SSOAccountID  string `json:"ssoAccountId,omitempty"`
-	SSORoleName   string `json:"ssoRoleName,omitempty"`
-	RoleARN       string `json:"roleArn,omitempty"`
-	SourceProfile string `json:"sourceProfile,omitempty"`
+	// Diagnostics はこの profile のキャッシュを読み取れなかった理由
+	Diagnostics   []string `json:"diagnostics,omitempty"`
+	Name          string   `json:"name"`
+	Region        string   `json:"region,omitempty"`
+	Output        string   `json:"output,omitempty"`
+	SSOSession    string   `json:"ssoSession,omitempty"`
+	SSOStartURL   string   `json:"ssoStartUrl,omitempty"`
+	SSORegion     string   `json:"ssoRegion,omitempty"`
+	SSOAccountID  string   `json:"ssoAccountId,omitempty"`
+	SSORoleName   string   `json:"ssoRoleName,omitempty"`
+	RoleARN       string   `json:"roleArn,omitempty"`
+	SourceProfile string   `json:"sourceProfile,omitempty"`
 	// SessionState はこの profile が属する sso-session の状態(SSO を使わない profile では空)
 	SessionState ssocache.EvaluationState `json:"sessionState,omitempty"`
 	// SessionExpiresAt は sso-session のトークン有効期限 未使用/未算出なら省略(D9 の TUI/list 表示用)
 	SessionExpiresAt *time.Time `json:"sessionExpiresAt,omitempty"`
-	// LastUsedAt は ~/.aws/cli/cache の最終使用時刻(mtime) 未使用/未算出なら省略
+	// LastUsedAt はロール認証情報キャッシュの取得・更新時刻(mtime)。JSON 名は互換性のため維持する。
 	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
 	// CredentialExpiresAt は ~/.aws/cli/cache のロール認証情報の有効期限 未使用/未算出なら省略
 	CredentialExpiresAt *time.Time `json:"credentialExpiresAt,omitempty"`
@@ -53,7 +55,7 @@ type ProfileListOptions struct {
 	Now time.Time
 }
 
-// BuildProfileList は profile 一覧に sso-session の認証状態と最終使用情報を付与する
+// BuildProfileList は profile 一覧に sso-session の認証状態と認証情報取得情報を付与する
 func BuildProfileList(profiles []awsconfig.Profile, sessions []awsconfig.SSOSession, opts ProfileListOptions) (ProfileList, error) {
 	now := opts.Now
 	if now.IsZero() {
@@ -87,12 +89,12 @@ func BuildProfileList(profiles []awsconfig.Profile, sessions []awsconfig.SSOSess
 		if session, ok := awsconfig.ResolveSession(profile, sessions); ok {
 			tokenPath := ssocache.TokenPath(ssoCacheDir, session.CacheKey())
 			meta, err := ssocache.ReadTokenMeta(tokenPath)
-			if err != nil {
-				return ProfileList{}, err
-			}
-			eval := ssocache.Evaluate(meta, now, opts.Grace)
+			eval := evaluateSession(session, meta, now, opts.Grace)
 			info.SessionState = eval.State
-			if eval.State != ssocache.StateUnknown {
+			if err != nil {
+				info.SessionState = ssocache.StateError
+				info.Diagnostics = append(info.Diagnostics, err.Error())
+			} else if eval.State != ssocache.StateUnknown {
 				expiresAt := eval.ExpiresAt
 				info.SessionExpiresAt = &expiresAt
 			}
@@ -111,9 +113,8 @@ func BuildProfileList(profiles []awsconfig.Profile, sessions []awsconfig.SSOSess
 
 			roleMeta, err := ssocache.ReadRoleCredentialMeta(ssocache.RoleCredentialPath(opts.CLICacheDir, key))
 			if err != nil {
-				return ProfileList{}, err
-			}
-			if roleMeta.Exists {
+				info.Diagnostics = append(info.Diagnostics, err.Error())
+			} else if roleMeta.Exists {
 				lastUsed := roleMeta.LastUsed
 				info.LastUsedAt = &lastUsed
 				expiration := roleMeta.Expiration
