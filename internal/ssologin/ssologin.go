@@ -660,17 +660,17 @@ func (c *callbackServer) handle(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case query.Get("error") != "":
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = io.WriteString(w, failureCallbackPage)
+		_, _ = io.WriteString(w, failureCallbackPage())
 		c.send(callbackResult{err: fmt.Errorf("認可が拒否されました: %s", query.Get("error"))})
 
 	case query.Get("code") != "":
 		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, successCallbackPage)
+		_, _ = io.WriteString(w, successCallbackPage())
 		c.send(callbackResult{code: query.Get("code"), state: query.Get("state")})
 
 	default:
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = io.WriteString(w, unexpectedCallbackPage)
+		_, _ = io.WriteString(w, unexpectedCallbackPage())
 	}
 }
 
@@ -689,15 +689,6 @@ func (c *callbackServer) close() {
 		_ = c.server.Shutdown(ctx)
 	})
 }
-
-const (
-	successCallbackPage = `<!doctype html><meta charset="utf-8"><title>awsp</title>` +
-		`<body>awsp: 認証が完了しました。このタブは閉じて構いません。</body>`
-	failureCallbackPage = `<!doctype html><meta charset="utf-8"><title>awsp</title>` +
-		`<body>awsp: 認証に失敗しました。ターミナルを確認してください。</body>`
-	unexpectedCallbackPage = `<!doctype html><meta charset="utf-8"><title>awsp</title>` +
-		`<body>awsp: 想定外のリクエストです。</body>`
-)
 
 func writeTokenFileAtomic(path string, file tokenFile) (err error) {
 	dir := filepath.Dir(path)
