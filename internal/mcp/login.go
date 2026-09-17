@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -35,30 +34,11 @@ type LoginInput struct {
 }
 
 // LoginOutput は login ツールの出力 トークン値は絶対に含めない
-type LoginOutput struct {
-	// Status は "ok"(セッション確立済み)か "pending"(承認待ち 別フィールドで案内)
-	Status string `json:"status"`
-	// Session はログイン対象の sso-session 名 legacy 形式では sso_start_url
-	Session string `json:"session"`
-	// State はこの応答時点でのセッション状態 status=pending の間はログインフロー開始前の状態を示す
-	State ssocache.EvaluationState `json:"state"`
-	// ExpiresAt はアクセストークンの有効期限 status=ok のときだけ設定する
-	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
-	// Identity は対象 profile が分かった場合の caller identity status=ok のときだけ設定する
-	Identity *awsp.Identity `json:"identity,omitempty"`
-	// Method はログイン方式("authorization_code" または "device_code") status=pending のときだけ設定する
-	Method string `json:"method,omitempty"`
-	// AuthorizationURL は人が開くべき認可 URL status=pending のときだけ設定する
-	AuthorizationURL string `json:"authorizationUrl,omitempty"`
-	// UserCode は device_code のときだけ設定する AuthorizationURL とは別に入力するコード
-	UserCode string `json:"userCode,omitempty"`
-	// Message は人 または エージェントが次に何をすべきかの説明
-	Message string `json:"message"`
-}
+type LoginOutput = awsp.LoginResult
 
 // login は login ツールのハンドラ
-// 既に有効なら device flow を起こさず即返す(D4)
-// 未確立なら loginManager 経由で device flow を開始/合流し 呼び出し側の timeout まで待つ(D3 D13)
+// 既に有効なら profile の identity を確認して返す(D4)
+// 未確立なら loginManager 経由で認可フローを開始/合流し 呼び出し側の timeout まで待つ(D3 D13)
 func (h *handlers) login(ctx context.Context, req *sdkmcp.CallToolRequest, in LoginInput) (*sdkmcp.CallToolResult, LoginOutput, error) {
 	profiles, err := h.deps.Profiles.ProfileDetails(ctx)
 	if err != nil {
@@ -77,152 +57,92 @@ func (h *handlers) login(ctx context.Context, req *sdkmcp.CallToolRequest, in Lo
 		return nil, LoginOutput{}, err
 	}
 
-	timeout := clampLoginTimeout(in.TimeoutSeconds)
+	waitCtx, cancel := context.WithTimeout(ctx, clampLoginTimeout(in.TimeoutSeconds))
+	defer cancel()
 
-	tokenPath := ssocache.TokenPath(h.deps.SSOCacheDir, session.CacheKey())
-	meta, err := ssocache.ReadTokenMeta(tokenPath)
-	if err != nil {
-		return nil, LoginOutput{}, err
-	}
-	eval := ssocache.Evaluate(meta, h.deps.now(), defaultGrace)
-
-	if eval.State == ssocache.StateOK {
-		out := LoginOutput{
-			Status:  "ok",
-			Session: displayName(session),
-			State:   ssocache.StateOK,
-			Message: "既に有効な SSO セッションです",
-		}
-		expiresAt := eval.ExpiresAt
-		out.ExpiresAt = &expiresAt
-		if err := attachIdentity(ctx, h.deps.AWS, profile, &out); err != nil {
-			return nil, LoginOutput{}, err
-		}
-		return nil, out, nil
-	}
-
-	if h.deps.NewOIDCClient == nil {
-		return nil, LoginOutput{}, errors.New("mcp: Deps.NewOIDCClient が未設定です")
-	}
-
+	// キャッシュ確認も所有権取得後に行い、直前に完了したログインを見落とさない。
 	key := session.CacheKey()
 	entry, starter := h.manager.acquire(key)
 	if starter {
-		h.startFlow(session, key, entry, in.UseDeviceCode)
+		h.startFlow(session, profile, key, entry, in)
 	}
 
+	var flow *ssologin.Flow
+	state := ssocache.StateUnknown
 	select {
 	case <-entry.ready:
-	case <-ctx.Done():
-		return nil, LoginOutput{}, fmt.Errorf("ログイン開始待ちがキャンセルされました: %w", ctx.Err())
+		flow, state = entry.flow, entry.state
+	case <-waitCtx.Done():
+		return nil, pendingOutput(session, nil, state, "ログインを開始しています。login を再度呼び出すと同じ処理の進捗を確認できます"), nil
 	}
 
-	if entry.startErr != nil {
-		return nil, LoginOutput{}, fmt.Errorf("ログインの開始に失敗: %w", entry.startErr)
+	if flow != nil {
+		if starter && flow.BrowserErr != nil {
+			return nil, pendingOutput(session, flow, state,
+				"ブラウザの自動起動を確認できませんでした。URL を手動で開いて承認し、login を再度呼び出してください"), nil
+		}
+		notifyProgress(ctx, req, flow)
 	}
-	flow := entry.flow
-
-	// ブラウザを自動起動できなかった場合は「今このフローを起こした呼び出し」だけ即 pending で返す(D13)
-	// 合流した呼び出し(starter=false)はこの時点で既に URL/コードが確定しているので待ちに入る
-	if starter && flow.BrowserErr != nil {
-		return nil, pendingOutput(session, flow, eval.State,
-			"ブラウザの自動起動に失敗しました。以下の URL を開いて承認してください。"+
-				"承認後に login を再度呼び出すと状態を確認できます"), nil
-	}
-
-	notifyProgress(ctx, req, flow)
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
 
 	select {
 	case <-entry.done:
-		if entry.waitErr != nil {
-			return nil, LoginOutput{}, entry.waitErr
+		// 認証情報の確認エラーは対象 profile だけに返す。同じセッションの別ロールに波及させない。
+		if entry.err != nil && (entry.result.Status != "ok" || entry.profile == profile) {
+			return nil, LoginOutput{}, entry.err
 		}
-		out := LoginOutput{
-			Status:  "ok",
-			Session: displayName(session),
-			State:   ssocache.StateOK,
-			Message: "ログインが完了しました",
-		}
-		expiresAt := entry.result.ExpiresAt
-		out.ExpiresAt = &expiresAt
-		if err := attachIdentity(ctx, h.deps.AWS, profile, &out); err != nil {
-			return nil, LoginOutput{}, err
-		}
-		return nil, out, nil
-
-	case <-timer.C:
-		return nil, pendingOutput(session, flow, eval.State,
-			"承認待ちがタイムアウトしました。ログインはサーバー内で継続しています。"+
-				"login を再度呼び出すと合流して続きから待てます"), nil
-
-	case <-ctx.Done():
-		return nil, pendingOutput(session, flow, eval.State,
-			"呼び出しがキャンセルされました。ログインはサーバー内で継続しています。"+
-				"login を再度呼び出すと合流して続きから待てます"), nil
+		out, err := awsp.WithLoginIdentity(waitCtx, h.deps.AWS, profile, entry.result)
+		return nil, out, err
+	case <-waitCtx.Done():
+		return nil, pendingOutput(session, flow, state,
+			"待機を終了しました。ログインはサーバー内で継続しています。login を再度呼び出すと合流して待てます"), nil
 	}
 }
 
-// startFlow はログインフローを開始し 完了(または失敗)まで h.rootCtx 上で goroutine を継続する(D3 D4)
-// h.rootCtx は MCP サーバーの寿命に紐づく長寿命コンテキストで
-// 個々の login 呼び出しの ctx がキャンセル/タイムアウトしてもフローは止まらない
-func (h *handlers) startFlow(session awsconfig.SSOSession, key string, entry *loginFlowEntry, useDeviceCode bool) {
+// startFlow はキャッシュ確認から認証完了までをセッション単位で共有する。
+// 個々の呼び出しの期限では中断せず、サーバーの寿命と認証処理の上限に従う。
+func (h *handlers) startFlow(session awsconfig.SSOSession, profile, key string, entry *loginFlowEntry, in LoginInput) {
 	go func() {
-		client := h.deps.NewOIDCClient(session.Region)
-		flow, err := ssologin.Start(h.rootCtx, session, ssologin.Options{
-			Client:        client,
+		entry.profile = profile
+		started := false
+		entry.result, entry.err = awsp.Login(h.rootCtx, session, profile, awsp.LoginDeps{AWS: h.deps.AWS}, awsp.LoginOptions{
 			CacheDir:      h.deps.SSOCacheDir,
+			Grace:         defaultGrace,
+			Now:           h.deps.now,
+			Timeout:       maxLoginTimeout,
+			NewOIDCClient: h.deps.NewOIDCClient,
 			OpenBrowser:   h.deps.OpenBrowser,
-			UseDeviceCode: useDeviceCode,
+			UseDeviceCode: in.UseDeviceCode,
+			OnStarted: func(flow *ssologin.Flow, state ssocache.EvaluationState) {
+				entry.flow, entry.state = flow, state
+				started = true
+				close(entry.ready)
+			},
 		})
-		entry.flow = flow
-		entry.startErr = err
-		close(entry.ready)
-
-		if err != nil {
-			close(entry.done)
-			h.manager.release(key, entry)
-			return
-		}
-
-		// 待ちの上限は device code の有効期限そのもの(呼び出し側の timeout とは無関係)
-		waitCtx, cancel := context.WithDeadline(h.rootCtx, flow.ExpiresAt)
-		defer cancel()
-
-		result, waitErr := flow.Wait(waitCtx)
-		entry.result = result
-		entry.waitErr = waitErr
 		close(entry.done)
+		if !started {
+			close(entry.ready)
+		}
 		h.manager.release(key, entry)
 	}()
 }
 
-// attachIdentity は profile が分かっている場合だけ STS で identity を取得して out に添える
-func attachIdentity(ctx context.Context, client awsp.AWSIdentityClient, profile string, out *LoginOutput) error {
-	if profile == "" || client == nil {
-		return nil
-	}
-	identity, err := awsp.Whoami(ctx, client, profile)
-	if err != nil {
-		return fmt.Errorf("ログイン後の identity 取得に失敗: %w", err)
-	}
-	out.Identity = &identity
-	return nil
-}
-
-// pendingOutput は承認待ちを表す LoginOutput を組み立てる
+// pendingOutput は開始待ち、またはブラウザでの承認待ちを表す。
 func pendingOutput(session awsconfig.SSOSession, flow *ssologin.Flow, state ssocache.EvaluationState, message string) LoginOutput {
-	return LoginOutput{
-		Status:           "pending",
-		Session:          displayName(session),
-		State:            state,
-		Method:           flow.Method,
-		AuthorizationURL: flow.AuthorizationURL,
-		UserCode:         flow.UserCode,
-		Message:          message,
+	out := LoginOutput{
+		SchemaVersion: 1,
+		Status:        "pending",
+		Phase:         "starting",
+		Session:       displayName(session),
+		State:         state,
+		Message:       message,
 	}
+	if flow != nil {
+		out.Phase = "authorizing"
+		out.Method = flow.Method
+		out.AuthorizationURL = flow.AuthorizationURL
+		out.UserCode = flow.UserCode
+	}
+	return out
 }
 
 // notifyProgress はブロック直前に進行通知で認可 URL(device code なら Code も)を流す
@@ -252,11 +172,10 @@ func clampLoginTimeout(seconds int) time.Duration {
 	if seconds <= 0 {
 		return defaultLoginTimeout
 	}
-	d := time.Duration(seconds) * time.Second
-	if d > maxLoginTimeout {
+	if seconds > int(maxLoginTimeout/time.Second) {
 		return maxLoginTimeout
 	}
-	return d
+	return time.Duration(seconds) * time.Second
 }
 
 // displayName は sso-session の表示名を返す legacy 形式では start URL を使う

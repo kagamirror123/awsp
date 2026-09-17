@@ -52,7 +52,7 @@ func NewServer(ctx context.Context, deps Deps, impl *sdkmcp.Implementation) *sdk
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "list_profiles",
 		Description: "List the AWS profiles found in the AWS config, along with the SSO session state and " +
-			"last-used role credentials for each. Reads only local files; makes no network calls. " +
+			"role credential cache timestamps for each. Reads only local files; makes no network calls. " +
 			d11Note + " " + noTokenNote,
 		Annotations: &sdkmcp.ToolAnnotations{
 			ReadOnlyHint:  true,
@@ -80,11 +80,11 @@ func NewServer(ctx context.Context, deps Deps, impl *sdkmcp.Implementation) *sdk
 			"device-authorization flow instead, which lets the human approve from any device by opening a " +
 			"URL and entering a code (useful for remote/headless environments), but device-code grants may " +
 			"be disabled by the organization's Identity Center. " +
-			"If the session is already valid, returns status=ok immediately without starting a new flow. " +
+			"If the cached token is unexpired, verifies the caller identity when a profile is given; reauthenticates on an invalid or expired token, but returns network or permission errors without reopening a browser. " +
 			"If the browser cannot be opened automatically, returns status=pending immediately with " +
 			"authorizationUrl (and userCode for device_code) for the human to open manually; call login " +
 			"again with the same target to join that same in-progress flow and keep waiting. " +
-			"Calling login again for a target that is already being logged in joins the same flow instead of " +
+			"Timeout includes startup. If no authorization URL is available yet, returns status=pending with phase=starting; call login again to check progress. The startup APIs have a 30-second deadline. Calling login again for a target that is already being logged in joins the same flow instead of " +
 			"starting a duplicate one. " + d11Note + " " + noTokenNote,
 		Annotations: &sdkmcp.ToolAnnotations{
 			ReadOnlyHint:  false,

@@ -17,15 +17,15 @@ type WhoamiInput struct {
 
 // whoami は whoami ツールのハンドラ
 // STS を叩いて caller identity を取得する 自動ログインは行わない(失敗時は login を案内する)
-func (h *handlers) whoami(ctx context.Context, _ *sdkmcp.CallToolRequest, in WhoamiInput) (*sdkmcp.CallToolResult, awsp.Identity, error) {
+func (h *handlers) whoami(ctx context.Context, _ *sdkmcp.CallToolRequest, in WhoamiInput) (*sdkmcp.CallToolResult, awsp.IdentityReport, error) {
 	if in.Profile == "" {
-		return nil, awsp.Identity{}, errors.New("profile は必須です: list_profiles で名前を確認してください")
+		return nil, awsp.IdentityReport{}, errors.New("profile は必須です: list_profiles で名前を確認してください")
 	}
 
 	identity, err := awsp.Whoami(ctx, h.deps.AWS, in.Profile)
 	if err != nil {
-		return nil, awsp.Identity{}, err
+		return nil, awsp.IdentityReport{}, err
 	}
 
-	return nil, identity, nil
+	return nil, awsp.IdentityReport{SchemaVersion: 1, Identity: identity}, nil
 }

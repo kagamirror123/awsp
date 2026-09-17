@@ -33,7 +33,7 @@ func newWhoamiCmd() *cobra.Command {
 			}
 
 			if jsonOutput {
-				return json.NewEncoder(cmd.OutOrStdout()).Encode(identity)
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(awsp.IdentityReport{SchemaVersion: 1, Identity: identity})
 			}
 
 			out := ui.NewWriter(cmd.OutOrStdout())

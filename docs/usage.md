@@ -11,14 +11,16 @@
 | `awsp "(unset)"` | `AWS_PROFILE` と静的認証情報(`AWS_ACCESS_KEY_ID` など)を解除 |
 | `awsp current` | いまの `AWS_PROFILE` の caller identity。失効していれば自動ログイン |
 | `awsp whoami [profile]` | caller identity を確認するだけ。自動ログインしない。省略時は `AWS_PROFILE` |
-| `awsp list` | 一覧。認証状態と残り時間、最終使用も見える |
+| `awsp list` | 一覧。認証状態と残り時間、認証情報取得時刻も見える |
 
-対話 UI は左に一覧、右に選択中の詳細。各行に状態と残り時間が付きます。
+対話 UI は広い端末では左に一覧、右に詳細を表示し、狭い端末では縦に並べます。各行に状態と残り時間が付き、現在の profile を ● で示して初期選択します。詳細が収まらない場合は PgUp/PgDn でスクロールできます。
+
+文字入力で検索を開始できます。q は検索中には文字として入力でき、検索中以外は中止に使います。q で始まる検索は / を押してから入力してください。Ctrl+C はどの状態でも中止します。
 
 | 記号 | 意味 |
 |---|---|
 | 🟢 | SSO セッションが有効 |
-| 🟡 | 期限切れだが refresh token があり、次に使うとき自動更新される見込み |
+| 🟡 | 期限切れだが refresh token があり、名前付き sso-session では使用時に自動更新を試みる(成功は未確認) |
 | 🔴 | 失効。ログインが必要 |
 | ⚪ | 未ログイン |
 | 🪪 | SSO を使わない profile(静的認証情報や `source_profile`) |
@@ -88,11 +90,17 @@ exit=1
 | 状態 | 条件 |
 |---|---|
 | `ok` | トークンの期限内 |
-| `warning` | 期限切れだが refresh token があり、猶予(既定 8 時間)以内。次に使うとき SDK が自動更新する見込み |
-| `error` | refresh token が無い、または猶予超過。`awsp login` が必要 |
+| `warning` | 期限切れだが refresh token があり、猶予(既定 8 時間)以内。名前付き sso-session に限り、SDK が使用時に自動更新を試みる。認証エラーなら `awsp login <profile>` を実行 |
+| `error` | legacy 形式の期限切れ、refresh token が無い、猶予超過、またはキャッシュを読めない。`awsp login` が必要 |
 | `unknown` | トークンキャッシュが無い(未ログイン) |
 
-判定は `~/.aws/sso/cache` の期限と refresh token の有無だけを読みます。トークン値は読みません。
+判定はローカルキャッシュの期限と refresh token の有無を使います。値をデコードすることはありますが、トークン値を出力には含めません。実際の失効や更新可否はローカルだけでは確定できません。
+
+壊れたキャッシュは該当セッションの error として表示し、他の profile の表示・切り替えは続けられます。通常の `awsp login` でもトークンキャッシュを修復できます。
+
+一覧の Fetched と詳細の fetched は CLI がロール認証情報のキャッシュを取得・更新した時刻です。API の最終使用時刻ではなく、Go SDK の利用でも更新されません。JSON の `lastUsedAt` は既存の名前を維持しています。
+
+期限内のトークンでも、profile 指定時の STS 確認で認証エラーになれば再ログインします。通信障害や権限不足ではブラウザを開かず、元のエラーを返します。開始 API の待機上限は 30 秒です。
 
 ### ログインの仕組み
 
@@ -101,7 +109,7 @@ Authorization Code + PKCE を Go で実装しています。`awsp login` は 127
 
 ## JSON 出力
 
-`current` / `list` / `status` / `login` / `whoami` は `--json` で機械可読になります。すべて `schemaVersion` を持ち、トークン値は含みません。
+`current` / `list` / `status` / `login` / `whoami` は `--json` で機械可読になります。すべて `schemaVersion` を持ち、トークン値は含みません。成功時の stdout 全体が 1 つの JSON になり、承認 URL や案内は stderr に出ます。whoami はフラットな profile / account / userId / arn、login は CLI と MCP 共通の型です。
 
 ```text
 $ awsp status --json

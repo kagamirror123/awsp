@@ -48,7 +48,7 @@ func TestFetchCurrentIdentity_WithLoginFallback(t *testing.T) {
 	var lastLoginProfile string
 	deps := currentIdentityDeps{
 		CallerIdentity: func(_ context.Context, _ string) (awscli.Identity, error) {
-			return awscli.Identity{}, errors.New("failed to refresh cached credentials")
+			return awscli.Identity{}, errors.New("SSOProviderInvalidToken: the SSO session has expired or is invalid")
 		},
 		Login: func(_ context.Context, profile string, _ io.Writer) (awscli.Identity, error) {
 			lastLoginProfile = profile

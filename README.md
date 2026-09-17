@@ -32,7 +32,7 @@ https://github.com/user-attachments/assets/c5d0397e-0774-4040-b3ea-40bba1de78f0
 ## ✨ Features
 
 - **選んで切り替える。** 一覧から選ぶか `awsp <profile>`。切り替えた瞬間に caller identity を確認して表示
-- **認証状態がひと目で分かる。** 各 profile に 🟢🟡🔴、残り時間、最終使用。判定はローカルだけで、ネットワークを使わない
+- **認証状態がひと目で分かる。** 各 profile に 🟢🟡🔴、残り時間、認証情報取得時刻。判定はローカルだけで、ネットワークを使わない
 - **ログインはブラウザで 1 クリック。** Authorization Code + PKCE を Go で内製。aws CLI は不要で、キャッシュは CLI と完全互換
 - **AI エージェントの道具になる。** `awsp mcp` で `auth_status` / `list_profiles` / `whoami` / `login`。`login` は人の承認を待ってから返る
 - **人間と AI で権限を分けられる。** `AWS_CONFIG_FILE` を尊重するので、エージェントには読み取り専用の config だけを見せられる
@@ -86,7 +86,7 @@ total=3  current=dev
 | `awsp preflight` | 1 行と exit code。フックやスクリプト向け |
 | `awsp mcp` | MCP サーバー(stdio) |
 
-すべて `--json` で機械可読になります。詳しくは **[docs/usage.md](docs/usage.md)**。
+`current` / `list` / `status` / `login` / `whoami` は `--json` で機械可読になります。詳しくは **[docs/usage.md](docs/usage.md)**。
 
 ## 🤖 AI エージェントから使う
 

@@ -1,6 +1,6 @@
 # awsp 設計ドキュメント: AI ネイティブ化
 
-状態: 2026-09-16 に grill を終え確定。実装に入る。設計の正典はこのファイル。
+状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正を反映。設計の正典はこのファイル。
 確定した項目は「決定事項」へ、退けた案は「却下した案」へ移し、理由を必ず残す。
 
 ## 1. 目的
@@ -25,7 +25,7 @@ awsp を「人間がシェルで切り替える手」に加えて、
 ## 3. 原則
 
 - 公開の汎用ツール。特定個人の config ファイル名や role 名を埋め込まない
-- トークン値・credentials をディスク・出力・ログ・MCP の結果に一切載せない。sso/cache は expiresAt と refreshToken の有無だけを読む
+- トークン値・credentials を出力・ログ・MCP の結果に載せない。ログイン時のみ AWS CLI 互換の sso/cache に保存する。状態確認は expiresAt と refreshToken の有無を使い、読み取ったトークン値は公開しない
 - 状態確認はローカルファイルのみでネットワークを使わない。ネットワークは whoami と login だけ
 - エラー文には次に打つコマンドを含める
 
@@ -36,20 +36,20 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | D1 | 提供形態 | CLI と MCP サーバー(stdio)の 2 出口。同じ Go 関数を共有 | SessionStart フックは CLI しか呼べない。エージェントの通常利用は型付きツールのほうが発見性と構造化で勝る |
 | D2 | MCP ツール | auth_status / list_profiles / whoami / login の 4 つ | エージェントの要求(§1)と 1 対 1 |
 | D3 | login の方式 | ブロック方式。人の承認完了まで待ち、STS で再確認して返す | 「login を 1 回呼ぶ → 続き」で流れが閉じる。authdoc の fix も同方式で 12 回成立 |
-| D4 | login の作法 | 既に有効なら即返す / 待ち上限を awsp 自身が持つ / 上限超過時はフローを止めず pending として URL とコードを返す / 進行中の二重起動は合流 | クライアント側タイムアウトとの二重管理を避け、再試行を可能にする。D12 でフローが in-process になったので「子プロセスを殺す」は不要になり、device code の期限までは再呼び出しが同じフローに合流できる(2026-09-16 実装時に改訂)。CLI ではプロセス終了と共にフローも終わる |
+| D4 | login の作法 | ローカルで期限内なら profile 指定時は STS で確認し、認証エラーなら再ログインする / 待ち上限を awsp 自身が持つ / 上限超過時はフローを止めず pending として URL とコードを返す / 進行中の二重起動は合流 | クライアント側タイムアウトとの二重管理を避け、再試行を可能にする。D12 でフローが in-process になったので「子プロセスを殺す」は不要になり、認可フローの期限までは再呼び出しが同じフローに合流できる(2026-09-16 実装時に改訂)。CLI ではプロセス終了と共にフローも終わる |
 | D5 | AWS_CONFIG_FILE | 尊重する。現状の `~/.aws/config` 固定を廃止 | エージェントセッションは別 config を向いている。今は `awsp list` が人間用 config を返す |
 | D6 | 出力契約 | JSON に schemaVersion。MCP ツールは outputSchema 付き | モデルが読む出力なので契約を明示し、変更を検知可能にする |
 | D7 | preflight | CLI のみ。1 行・装飾なし・exit code。ローカル判定 | SessionStart フック用。authdoc の状態モデルを移植 |
 | D8 | 描画 | Lip Gloss v2 に一本化。ヘルプとエラーは Fang。TUI は Bubble Tea v2 | pterm / go-pretty / lipgloss の 3 本立てを解消 |
-| D9 | TUI | 一覧行に認証状態(有効 / 失効)と残り時間、最終使用時刻を載せる | 選ぶ時点で「使えるか」が見える |
+| D9 | TUI | 一覧行に認証状態と残り時間、現在値の印を載せる。詳細には認証情報取得時刻を表示する | 選ぶ時点で「使えるか」が見える |
 | D10 | 非 TTY | stdin が端末でなければ TUI を出さず、次のコマンドを含むエラーで終わる | エージェントが誤って対話 UI を起こしても固まらない |
 | D11 | 切り替え | AWS_PROFILE の切り替えは人間用 zsh 関数に残す。エージェントは list_profiles で名前を知り `--profile` を付けて叩く | MCP からエージェントの Bash の環境変数は変えられない |
-| D12 | SSO ログインの実装 | aws CLI の exec をやめ、SDK(ssooidc)で **Authorization Code + PKCE**(localhost へのリダイレクト)を Go で持つ。CLI 互換の `~/.aws/sso/cache` を書く。人間の `awsp login` も同じ実装。device code は `--use-device-code` の opt-in として残す | URL とコードが構造化で取れ、D4 が素直に実装できる。現行コードは保守負荷を理由に CLI へ委譲していた(`internal/awscli/client.go`)が、当時は自前実装の便益がゼロだった。要件が変わったので覆す。条件: 「awsp が書いたトークンで `aws sts get-caller-identity` が通る」検証を手順に残す。**2026-09-16 改訂**: 当初は device code を採用したが、作者の Identity Center では公式 CLI の `--use-device-code` でも承認画面で「サインイン認証情報を確認できませんでした」と弾かれ、device code の grant 自体が通らないと判明。CLI 既定と同じ PKCE に切り替えた。OIDC クライアント登録は毎回新規に行う(PKCE は redirect URI のポートが毎回変わるため再利用できない) |
-| D13 | login の待ちと通知 | 待ち上限は既定 5 分、フラグで変更可。MCP では進行通知で認可 URL を流す(PKCE ではコードは無い。device code 時だけ userCode が付く)。ブラウザ起動に失敗したら認可 URL を結果に入れて即返し(pending)、フローはサーバー内で継続、次の login 呼び出しが合流してブロックする | 進行通知を表示しないクライアントでも人に URL が届く |
+| D12 | SSO ログインの実装 | aws CLI の exec をやめ、SDK(ssooidc)で **Authorization Code + PKCE**(localhost へのリダイレクト)を Go で持つ。CLI 互換の `~/.aws/sso/cache` を書く。人間の `awsp login` も同じ実装。device code は `--use-device-code` の opt-in として残す | URL とコードが構造化で取れ、D4 が素直に実装できる。更新前は保守負荷を理由に CLI へ委譲していた(`internal/awscli/client.go`)が、当時は自前実装の便益がゼロだった。要件が変わったので覆す。条件: 「awsp が書いたトークンで `aws sts get-caller-identity` が通る」検証を手順に残す。**2026-09-16 改訂**: 当初は device code を採用したが、作者の Identity Center では公式 CLI の `--use-device-code` でも承認画面で「サインイン認証情報を確認できませんでした」と弾かれ、device code の grant 自体が通らないと判明。CLI 既定と同じ PKCE に切り替えた。OIDC クライアント登録は追加のキャッシュ管理を避けるため毎回新規に行う。登録 URI はポートなしであり、再利用は技術的には可能 |
+| D13 | login の待ちと通知 | 待ち上限は開始処理を含めて既定 5 分、フラグで変更可。登録・開始 API には別途 30 秒の上限を設ける。MCP では開始待ちのまま呼び出し期限を迎えた場合も pending (phase=starting、URL なし) を返す。認可 URL が確定した後は phase=authorizing。共有処理はサーバーの寿命と認可期限、最大 15 分で終了する。MCP では進行通知で認可 URL を流す(PKCE ではコードは無い。device code 時だけ userCode が付く)。ブラウザ起動に失敗したら認可 URL を結果に入れて即返し(pending)、フローはサーバー内で継続、次の login 呼び出しが合流してブロックする | 進行通知を表示しないクライアントでも人に URL が届く |
 | D14 | 判定単位 | sso-session 単位。config に複数あれば全部判定し、1 つでも error なら overall は error | profile は同じ session を共有するので profile 単位は冗長 |
 | D15 | 読み取り専用 config の派生生成 | **2026-09-16 に撤回し却下へ**(§5 参照) | — |
 | D16 | TTY 別の状態ファイル | やらない | ps 方式は不可と実測済み。需要が出てから |
-| D17 | TUI の骨格 | 左一覧・右詳細の骨格は維持し、D9 の列を足す | 使い慣れた形を壊す理由がない |
+| D17 | TUI の骨格 | 幅 96 文字以上では左一覧・右詳細、狭い端末では縦配置。詳細は PgUp/PgDn でスクロールし、画面内に収める | 使い慣れた形を壊す理由がない |
 | D18 | 失効後の猶予 | 既定 8 時間、`--grace` で変更可 | IAM Identity Center のセッション期間の既定が 8 時間で、refreshToken はその期間内だけ使える。キャッシュにはセッション終端が無いので expiresAt からの推定で代用する |
 | D19 | コマンド名 | `status` / `preflight` / `whoami` / `login` / `mcp`。`current` と `list` は残す | 既存利用者の手癖を壊さない |
 | D20 | 配布 | goreleaser 継続。Homebrew tap は別作業。MCP 登録は README に `claude mcp add awsp -- awsp mcp` を書き、生成コマンドは作らない | 登録は 1 行で済む |
@@ -77,17 +77,28 @@ legacy 形式(`sso_start_url` 直書き)は `sha1(start URL)` がキー。
 | 状態 | 条件 | 表示 |
 |---|---|---|
 | ok | expiresAt が未来 | 有効(残り時間) |
-| warning | 期限切れだが refreshToken あり、猶予内 | 使用時に自動更新の見込み |
-| error | refreshToken なし、または猶予超過 | 失効。`awsp login` を案内 |
+| warning | 名前付き sso-session で期限切れだが refreshToken あり、猶予内 | 使用時に自動更新を試行。認証エラーなら awsp login を案内 |
+| error | legacy の期限切れ、refreshToken なし、猶予超過、またはキャッシュ読み取りエラー | 失効。`awsp login` を案内 |
 | unknown | キャッシュファイルなし | 未ログイン |
 
-猶予は既定 8 時間(D18)。
+猶予は既定 8 時間(D18)。refresh token の実際の有効期限はキャッシュから分からないため、自動更新の成功を保証しない。legacy 形式は SDK/CLI の自動更新対象ではない。キャッシュが壊れていても他のセッションの判定は続け、該当セッションに diagnostic を付けて error とする。
 
-### 6.2 profile 別の最終使用(TUI / list_profiles)
+### 6.2 profile 別の認証情報取得時刻(TUI / list_profiles)
 
-`~/.aws/cli/cache/<sha1(json)>.json` の mtime と `Credentials.Expiration`。
-キーは `{"accountId","roleName","sessionName"}` を sort_keys、区切り `(",",":")` で JSON 化した sha1。startUrl は含めない。
-`Credentials` のうち AccountId と Expiration 以外は読まない。
+`~/.aws/cli/cache/<sha1(json)>.json` の mtime と `Credentials.Expiration` を使う。
+mtime は CLI が認証情報を取得・更新した時刻であり、API の最終使用時刻ではない。Go SDK の利用では更新されない。
+表示名は Fetched とし、既存の JSON フィールド名 `lastUsedAt` は互換性のため維持する。
+
+キーは `{"accountId","roleName","sessionName"}` をキー順、空白なし、ASCII エスケープ付きの JSON にした SHA-1。
+legacy 形式では `sessionName` の代わりに `startUrl` を使う。`Credentials` から読むのは Expiration だけ。
+読み取りエラーは profile の diagnostics に載せ、一覧全体や他の profile の切り替えは止めない。
+
+### 6.3 JSON の契約
+
+`current` / `list` / `status` / `login` / `whoami` の CLI JSON、および MCP の各出力に `schemaVersion: 1` を付ける。
+whoami は profile / account / userId / arn をフラットに保つ。login は CLI/MCP 共通の型を使い、status は ok または pending。
+CLI は成功時だけ JSON を stdout に出し、URL・承認案内は stderr に出す。MCP には継続フローの管理と通知を残す。
+新規の任意フィールド追加はバージョン 1 で行い、既存フィールドの意味・型を壊す変更時にバージョンを上げる。
 
 ## 7. コマンドとツールの対応
 
@@ -106,35 +117,33 @@ legacy 形式(`sso_start_url` 直書き)は `sha1(start URL)` がキー。
 
 | # | 問い | 現時点の推奨 |
 |---|---|---|
-| Q10 | `warning`(期限切れだが refreshToken あり)の状態で `login` を呼んだとき、ブラウザを開かず refresh_token grant で静かに更新する経路を持つか | 持つ価値はある。今は ok 以外は全て device flow を起こす。ただし SDK は使用時に同じ更新を自動で行うので、`awsp <profile>` と MCP の通常経路では既に困らない。需要が見えてから |
+| Q10 | `warning`(期限切れだが refreshToken あり)の状態で `login` を呼んだとき、ブラウザを開かず refresh_token grant で静かに更新する経路を持つか | 持つ価値はある。現在は再認証が必要なら PKCE(指定時のみ device code)を使う。名前付き sso-session は SDK が使用時に更新を試みる。静かな refresh の追加は需要が見えてから |
 | Q11 | Fang のヘルプ・エラー表示が説明文の先頭語を Title Case にする(「AWS」→「Aws」)問題への恒久対応 | 説明文を日本語で書き始める運用で回避(AGENTS.md に規則化)。エラー表示は自前ハンドラで原文のまま出す。Fang 側に無効化オプションが入れば置き換える |
+
+| Q12 | 期限切れから 8 時間以内でも refresh token が無効なことがある | 初回認証からのセッション終端はキャッシュにない。独自の履歴は作らず warning を推定として表示し、認証エラーなら login を案内する。legacy は error とする |
 
 ## 9. スタック
 
-| 役割 | 採用 | 現状 |
-|---|---|---|
-| MCP | modelcontextprotocol/go-sdk v1.8.0(公式)、stdio | なし |
-| TUI | Bubble Tea v2.0.9 / Bubbles v2.2.1 / Lip Gloss v2.0.6 | v1 系と bubbles プレリリース |
-| CLI 外装 | Cobra + Fang v1.0.0 | Cobra + 手書きテンプレート |
-| AWS | SDK v2 + ssooidc v1.43.0(D12) | SDK v2 + aws CLI exec |
-| テスト | TUI は teatest のゴールデン。MCP は in-memory transport | go test |
+| 役割 | 採用 |
+|---|---|
+| MCP | modelcontextprotocol/go-sdk v1.8.0、stdio |
+| TUI | Bubble Tea v2.0.9 / Bubbles v2.2.1 / Lip Gloss v2.0.6 |
+| CLI 外装 | Cobra + Fang v1.0.0 |
+| AWS | SDK v2 + ssooidc v1.35.15 |
+| テスト | TUI は Update とコマンドを同期実行するゴールデン。点滅しないカーソルと固定時刻・タイムゾーンを使う。MCP は in-memory transport |
 
-## 10. 移行順
+## 10. 実装と検証
 
-実装状況(2026-09-16): 1〜7 を feature/ai-native ブランチで実装済み(未コミット)。D12 の完了条件は同日に確認済み: `awsp login <profile>`(PKCE)で書いたキャッシュに対して `aws sts get-caller-identity --profile <profile>` が通り、トークンファイルのキーは CLI と同じ 8 個、権限 0600、refreshToken あり。フックは差し替えず削除した(D21)。残りはコミットと authdoc の処遇。
+AWS_CONFIG_FILE、JSON、非 TTY、status / preflight、PKCE login、MCP、描画の統一は実装済み。
+派生 config 生成は撤回済み(D15)。2026-09-18 のレビューで認証復旧、破損キャッシュ、MCP の並行処理と期限、JSON 出力、TUI の端末幅への対応を修正した。
 
-1. AWS_CONFIG_FILE 尊重(D5)
-2. `--json` と非 TTY の振る舞い(D6, D10)
-3. `status` / `preflight`(D7、状態モデル §6)
-4. `login`(D3, D4, D12, D13)
-5. `mcp`(D1, D2)
-6. 描画の一本化と TUI(D8, D9)
-7. 派生 config(D15)
+D12 の実 AWS での確認は 2026-09-16 に実施済み: `awsp login <profile>` が書いたキャッシュで `aws sts get-caller-identity --profile <profile>` が成功し、トークンファイルのキーは CLI と同じ 8 個、権限 0600、refreshToken あり。レビュー修正の自動テストでは実 AWS を使わず、OIDC/STS のフェイク、隔離したキャッシュ、localhost のコールバックを使う。
 
-フック: 2026-09-16 に作者環境の SessionStart フック(authdoc)を削除し、awsp 側のフックも入れない(D21)。前身ツール authdoc に残る役割は無い。
+リリース前に必要な実環境の互換性確認は、利用者が `awsp login <profile> --force`、続いて `aws sts get-caller-identity --profile <profile>` を実行して行う。
+
+フックは 2026-09-16 に作者環境から削除済み(D21)。前身ツール authdoc に残る役割は無い。
 
 ## 11. 参照
 
-- 現行コードの CLI 委譲理由: `internal/awscli/client.go` の Client 型と Login のコメント
 - authdoc の `status --json` 形: schemaVersion / generatedAt / overall / targets[]{id, state, summary, expiresAt, remainingSeconds, detail}
-- 前身ツール authdoc の設計と実測(sso/cache・cli/cache のキー導出、トークン値を読まない原則)は本文 §6 に取り込んだ
+- 前身ツール authdoc の設計と実測(sso/cache・cli/cache のキー導出、トークン値を公開しない原則)は本文 §6 に取り込んだ

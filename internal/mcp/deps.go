@@ -30,7 +30,7 @@ type Deps struct {
 	Profiles ProfileStore
 	// SSOCacheDir は ~/.aws/sso/cache 相当のディレクトリ 未指定時は動作しない(呼び出し側で必須設定)
 	SSOCacheDir string
-	// CLICacheDir は ~/.aws/cli/cache 相当のディレクトリ(list_profiles の最終使用情報に使う)
+	// CLICacheDir は ~/.aws/cli/cache 相当のディレクトリ(list_profiles の認証情報取得情報に使う)
 	// 空文字なら付加情報の算出を省略する(awsp.BuildProfileList の仕様どおり)
 	CLICacheDir string
 	// AWS は STS の呼び出し主体確認に使う(whoami / login 後の identity 取得)

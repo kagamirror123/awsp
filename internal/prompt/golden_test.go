@@ -61,7 +61,8 @@ func goldenProfiles() []awsp.Profile {
 func newGoldenModel(t *testing.T) tea.Model {
 	t.Helper()
 
-	var model tea.Model = newSelectModel(buildItems(goldenProfiles(), goldenNow))
+	model := newSelectModel(buildItems(goldenProfiles(), goldenNow))
+	model.location = time.UTC
 	return apply(t, model, tea.WindowSizeMsg{Width: goldenWidth, Height: goldenHeight})
 }
 
@@ -82,11 +83,6 @@ func apply(t *testing.T, model tea.Model, msgs ...tea.Msg) tea.Model {
 	return model
 }
 
-// cmdTimeout は 1 つのコマンドの完了を待つ上限
-// カーソル点滅のようなタイマーはこの時間内に返らないので畳まずに捨てる
-// 状態を確定させるコマンド(絞り込み結果など)は即座に返るので取りこぼさない
-const cmdTimeout = 100 * time.Millisecond
-
 // drain はコマンドを実行して得たメッセージをモデルへ戻す
 // depth は相互に発火し続けるコマンドで止まらなくなるのを防ぐための上限
 func drain(t *testing.T, model tea.Model, cmd tea.Cmd, depth int) tea.Model {
@@ -100,10 +96,8 @@ func drain(t *testing.T, model tea.Model, cmd tea.Cmd, depth int) tea.Model {
 		t.Fatalf("コマンドの連鎖が %d 段を超えた", maxDepth)
 	}
 
-	msg, ok := runCmd(cmd)
-	if !ok {
-		return model
-	}
+	// 点滅しないカーソルを使うため、タイマーを壁時計で選別せず全て実行できる。
+	msg := cmd()
 
 	switch typed := msg.(type) {
 	case nil:
@@ -120,19 +114,6 @@ func drain(t *testing.T, model tea.Model, cmd tea.Cmd, depth int) tea.Model {
 		var next tea.Cmd
 		model, next = model.Update(msg)
 		return drain(t, model, next, depth+1)
-	}
-}
-
-// runCmd はコマンドを実行して結果を返す 時間内に返らなければ ok=false
-func runCmd(cmd tea.Cmd) (tea.Msg, bool) {
-	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
-
-	select {
-	case msg := <-done:
-		return msg, true
-	case <-time.After(cmdTimeout):
-		return nil, false
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf16"
 )
 
 // EvaluationState は SSO セッションの状態を表す文字列 enum
@@ -132,7 +133,7 @@ type RoleCredentialMeta struct {
 	Exists bool
 	// Expiration は Credentials.Expiration
 	Expiration time.Time
-	// LastUsed はキャッシュファイルの mtime(最終使用時刻の代用)
+	// LastUsed はキャッシュファイルの mtime(認証情報の取得・更新時刻)
 	LastUsed time.Time
 }
 
@@ -160,7 +161,20 @@ func RoleCredentialPath(cacheDir string, key RoleCredentialKey) string {
 		buf.Reset()
 		buf.WriteString("{}")
 	}
-	data := strings.TrimSuffix(buf.String(), "\n")
+	// Python の json.dumps は ensure_ascii=true。非 ASCII を UTF-16 の \u 表記にする。
+	var ascii strings.Builder
+	for _, r := range strings.TrimSuffix(buf.String(), "\n") {
+		switch {
+		case r < 0x7f:
+			ascii.WriteRune(r)
+		case r <= 0xffff:
+			fmt.Fprintf(&ascii, `\u%04x`, r)
+		default:
+			hi, lo := utf16.EncodeRune(r)
+			fmt.Fprintf(&ascii, `\u%04x\u%04x`, hi, lo)
+		}
+	}
+	data := ascii.String()
 
 	return filepath.Join(cacheDir, sha1Hex(data)+".json")
 }

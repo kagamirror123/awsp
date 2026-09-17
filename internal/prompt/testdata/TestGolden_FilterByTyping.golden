@@ -1,29 +1,30 @@
-☁️  awsp profile selector
-↑↓: move  Enter: select  type or /: filter  Esc: clear  q: quit
-╭───────────────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────╮
-│  🔎 dev                                                   ││ 📋 Profile detail                                       │
-│ │ ▶ 🟢 dev  52m                                           ││ 🔐 name                dev                              │
-│                                                           ││ 🌏 region              us-west-2                        │
-│                                                           ││ 🧾 output              -                                │
-│                                                           ││ 🧩 sso session         corp                             │
-│                                                           ││ 🏢 account id          111122223333                     │
-│                                                           ││ 🛡  role name           AdministratorAccess              │
-│                                                           ││ 🎭 role arn            -                                │
-│                                                           ││ 🔗 source              -                                │
-│                                                           ││                                                         │
-│                                                           ││ 🟢 session state       ok                               │
-│                                                           ││ ⏳ session expires     2026-01-01T00:52:00Z             │
-│                                                           ││ 🕘 last used           -                                │
-│                                                           ││ 🔑 credential expires  -                                │
-│                                                           ││                                                         │
-│                                                           ││ 接続時は caller identity を取得して表示                 │
-│                                                           ││                                                         │
-│                                                           ││                                                         │
-│                                                           ││                                                         │
-│                                                           ││                                                         │
-│                                                           ││                                                         │
-│                                                           ││                                                         │
-│                                                           ││                                                         │
-│                                                           ││                                                         │
-│                                                           ││                                                         │
-╰───────────────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────╯
+☁️  awsp  ● 現在の profile
+↑↓ 移動  Enter 決定  / 検索  q 終了
+╭───────────────────────────────────────────────╭──────────────────────────────────────────────────────────────────────╮
+│  🔎 dev                                       │ 📋 Profile detail                                                    │
+│ │ ▶ 🟢 dev  52m                               │ 🔐 name         dev                                                  │
+│                                               │ 🌏 region       us-west-2                                            │
+│                                               │ 🧾 output       -                                                    │
+│                                               │ 🧩 session      corp                                                 │
+│                                               │ 🏢 account      111122223333                                         │
+│                                               │ 🛡  role         AdministratorAccess                                  │
+│                                               │ 🎭 role arn     -                                                    │
+│                                               │ 🔗 source       -                                                    │
+│                                               │                                                                      │
+│                                               │ 🟢 state        ok                                                   │
+│                                               │ ⏳ SSO expires  01/01 00:52 UTC                                      │
+│                                               │ 🕘 fetched      -                                                    │
+│                                               │ 🔑 cred expires -                                                    │
+│                                               │                                                                      │
+│                                               │ 接続時は caller identity を取得して表示                              │
+│                                               │                                                                      │
+│                                               │                                                                      │
+│                                               │                                                                      │
+│                                               │                                                                      │
+│                                               │                                                                      │
+│                                               │                                                                      │
+│                                               │                                                                      │
+│                                               │                                                                      │
+│                                               │                                                                      │
+│                                               │                                                                      │
+╰───────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────╯

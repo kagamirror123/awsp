@@ -137,6 +137,9 @@ func sessionRemainingLabel(session awsp.SessionStatus) string {
 // warning は WarnLine error/unknown は ErrorLine で強調する
 func sessionSummaryLine(name string, session awsp.SessionStatus) string {
 	message := fmt.Sprintf("%s: %s", name, session.Summary)
+	if session.Diagnostic != "" {
+		message += "\n" + session.Diagnostic
+	}
 	if session.State == ssocache.StateWarning {
 		return ui.WarnLine(message)
 	}
