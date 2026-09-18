@@ -25,10 +25,16 @@ import (
 )
 
 type rootOptions struct {
-	verbose   bool
-	shell     bool
+	verbose bool
+	// shell は --shell の値 空なら人間向け表示 値なしの --shell は posix(D24)
+	shell     string
 	noLogin   bool
 	loginOnly bool
+}
+
+// shellMode は --shell 出力モードかどうかを返す
+func (o *rootOptions) shellMode() bool {
+	return o.shell != ""
 }
 
 // cliError は表示メッセージの抑制と exit code を制御するエラー
@@ -150,11 +156,17 @@ func newRootCmd() *cobra.Command {
 			"  awsp login",
 			"  awsp whoami dev",
 			"  awsp init zsh",
+			"  awsp init fish",
 		}, "\n"),
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			shellSyntax, err := awsp.ParseShellSyntax(opts.shell)
+			if err != nil {
+				return err
+			}
+
 			logger := newLogger(opts.verbose, cmd.ErrOrStderr())
 
 			profileStore := newProfileStore()
@@ -180,7 +192,7 @@ func newRootCmd() *cobra.Command {
 			// Selector(TUI)は bubbletea 自身が出力先から色プロファイルを判定するため
 			// colorprofile.Writer で包まない生の Writer を渡す
 			selectorOutput := cmd.OutOrStdout()
-			if opts.shell {
+			if opts.shellMode() {
 				selectorOutput = cmd.ErrOrStderr()
 				loginOutput = stderr
 			}
@@ -199,12 +211,12 @@ func newRootCmd() *cobra.Command {
 			})
 
 			runOptions := awsp.RunOptions{
-				ShellMode: opts.shell,
+				Shell:     shellSyntax,
 				SkipLogin: opts.noLogin,
 				LoginOnly: opts.loginOnly,
 			}
 
-			if !opts.shell {
+			if !opts.shellMode() {
 				_, _ = fmt.Fprintln(stdout)
 			}
 			if err := runner.Run(cmd.Context(), profileArg, runOptions); err != nil {
@@ -216,7 +228,14 @@ func newRootCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVarP(&opts.verbose, "verbose", "v", false, "詳細ログを表示")
-	cmd.Flags().BoolVar(&opts.shell, "shell", false, "親シェルへ反映するためのコマンドを標準出力へ出す")
+	cmd.Flags().StringVar(
+		&opts.shell,
+		"shell",
+		"",
+		"親シェルへ反映するためのコマンドを標準出力へ出す(posix|fish。値なしは posix)",
+	)
+	// 値なしの --shell を許す(既存の zsh 関数が `--shell` 単独で呼ぶため)。値は --shell=fish の形で渡す
+	cmd.Flags().Lookup("shell").NoOptDefVal = "posix"
 	cmd.Flags().BoolVar(
 		&opts.noLogin,
 		"no-login",

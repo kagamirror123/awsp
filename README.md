@@ -41,12 +41,10 @@ https://github.com/user-attachments/assets/c5d0397e-0774-4040-b3ea-40bba1de78f0
 ## Quick Start
 
 ```bash
-# 1. インストール(macOS arm64 の例。他は Releases から)
-AWSP_VERSION=$(curl -fsSL https://api.github.com/repos/kagamirror123/awsp/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
-curl -fL -o /tmp/awsp "https://github.com/kagamirror123/awsp/releases/download/v${AWSP_VERSION}/awsp_${AWSP_VERSION}_darwin_arm64"
-install -m 0755 /tmp/awsp /usr/local/bin/awsp
+# 1. インストール(macOS は Homebrew。Linux は下の curl)
+brew install --cask kagamirror123/tap/awsp
 
-# 2. シェル連携(awsp <profile> の結果を親シェルに反映するために必要)
+# 2. シェル連携(awsp <profile> の結果を親シェルに反映するために必要。bash / fish は下の表)
 echo 'eval "$(awsp init zsh)"' >> ~/.zshrc && exec zsh
 
 # 3. 使う
@@ -56,6 +54,14 @@ awsp status     # SSO セッションの状態
 
 # 4. エージェントからも使うなら
 claude mcp add awsp -- awsp mcp
+```
+
+Homebrew を使わない場合(Linux など)は Releases のバイナリをそのまま置きます。
+
+```bash
+AWSP_VERSION=$(curl -fsSL https://api.github.com/repos/kagamirror123/awsp/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+curl -fL -o /tmp/awsp "https://github.com/kagamirror123/awsp/releases/download/v${AWSP_VERSION}/awsp_${AWSP_VERSION}_linux_amd64"
+install -m 0755 /tmp/awsp /usr/local/bin/awsp
 ```
 
 ## Usage
@@ -88,6 +94,12 @@ total=3  current=dev
 
 `current` / `list` / `status` / `login` / `whoami` は `--json` で機械可読になります。詳しくは **[docs/usage.md](docs/usage.md)**。
 
+| シェル | 連携の 1 行 |
+|---|---|
+| zsh | `echo 'eval "$(awsp init zsh)"' >> ~/.zshrc` |
+| bash | `echo 'eval "$(awsp init bash)"' >> ~/.bashrc` |
+| fish | `echo 'awsp init fish \| source' >> ~/.config/fish/config.fish` |
+
 ## 🤖 AI エージェントから使う
 
 ```bash
@@ -112,6 +124,7 @@ claude mcp add awsp -- awsp mcp
 - ログインは aws CLI を exec せず SDK(ssooidc)で PKCE を内製。トークンキャッシュは CLI と完全互換
 - 状態確認はローカルファイルだけ。ネットワークを使うのは `whoami` と `login` だけ
 - 描画は Lip Gloss v2 と Bubble Tea v2。非 TTY と `NO_COLOR` では装飾を落とし、表は端末幅に収める
+- 配布は macOS と Linux(amd64 / arm64)。macOS は Homebrew tap(cask)、Release には各アーカイブの SBOM(SPDX JSON)を添付
 
 決定と却下した案の記録は **[docs/design.md](docs/design.md)**。
 

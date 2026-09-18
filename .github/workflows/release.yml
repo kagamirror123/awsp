@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*"
+  # auto-release.yml から同じ実行内で呼ぶための入口(D26)
+  workflow_call:
 
 permissions:
   contents: write
@@ -25,6 +27,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # SBOM の生成に使う(D27)
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -33,3 +39,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Homebrew tap(kagamirror123/homebrew-tap)へ cask を push するための fine-grained PAT(D28)
+          # GITHUB_TOKEN は awsp リポジトリにしか届かない
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

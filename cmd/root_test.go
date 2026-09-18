@@ -54,19 +54,6 @@ func TestEnsureKnownProfile(t *testing.T) {
 	})
 }
 
-func TestRenderZshInitScript(t *testing.T) {
-	t.Run("フラグ指定を profile と誤解釈しない", func(t *testing.T) {
-		script := renderZshInitScript(`"/usr/local/bin/awsp"`)
-
-		if !strings.Contains(script, `if [[ "$1" == -* ]]; then`) {
-			t.Fatalf("フラグ素通しの分岐が存在しない")
-		}
-		if !strings.Contains(script, `current|list|completion|help|init|version|status|preflight|login|whoami|mcp`) {
-			t.Fatalf("サブコマンド素通しの分岐が存在しない")
-		}
-	})
-}
-
 func TestResolveConfigFilePath(t *testing.T) {
 	t.Run("AWS_CONFIG_FILE が優先される", func(t *testing.T) {
 		t.Setenv("AWS_CONFIG_FILE", "/tmp/custom-aws-config")

@@ -1,0 +1,38 @@
+# 依存更新の自動化(D26): 週 1 回 エコシステムごとに 1 本の PR にまとめる
+# CI 通過後の自動マージは .github/workflows/dependabot-automerge.yml
+# マージ後の自動リリースは .github/workflows/auto-release.yml
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    groups:
+      go-deps:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies

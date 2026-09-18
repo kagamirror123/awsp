@@ -69,7 +69,7 @@
 - `awsp login [profile]`
 - `awsp whoami [profile]`(省略時は AWS_PROFILE)
 - `awsp mcp`
-- `awsp init zsh`
+- `awsp init zsh|bash|fish`
 - `awsp completion zsh`
 
 ## 開発コマンド
@@ -91,5 +91,6 @@
 ## 備考
 
 - `Taskfile` は `mise` がある場合に自動で `mise exec` を使う
-- `awsp init zsh` で関数を導入すると `awsp <profile>` 実行時に親シェルへ反映される
-- `--shell` はその関数が内部で使う export / unset 出力モード
+- `awsp init zsh|bash|fish` で関数を導入すると `awsp <profile>` 実行時に親シェルへ反映される
+- `--shell` はその関数が内部で使う出力モード。値なしは posix(export / unset)、`--shell=fish` は set -gx / set -e
+- 配布は darwin / linux のみ(Windows は D25 で対象外)。依存更新は Dependabot → CI 通過で auto-merge → patch を自動タグしてリリース(D26)
