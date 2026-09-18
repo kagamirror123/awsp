@@ -12,6 +12,7 @@
 | `awsp current` | いまの `AWS_PROFILE` の caller identity。失効していれば自動ログイン |
 | `awsp whoami [profile]` | caller identity を確認するだけ。自動ログインしない。省略時は `AWS_PROFILE` |
 | `awsp list` | 一覧。認証状態と残り時間、認証情報取得時刻も見える |
+| `awsp console [profile] [url]` | その profile の account / role でマネジメントコンソールをブラウザで開く。省略時は `AWS_PROFILE` |
 
 `awsp de<Tab>` で profile 名を補完できます。`login` と `whoami` の引数も同じです。Homebrew で入れた場合は補完スクリプトが一緒に入ります。手で置く場合は次のように生成します。
 
@@ -69,6 +70,20 @@ $ awsp dev
 | bash | `eval "$(awsp init bash)"` |
 | fish | `awsp init fish \| source` |
 
+## コンソールを開く
+
+`awsp console` は IAM Identity Center のアクセスポータルの deep link(`<start_url>/#/console?account_id=…&role_name=…`)を組んでブラウザで開きます。ブラウザに SSO のセッションが残っていれば再認証なしでコンソールに入れます。トークンや認証情報には触れません。
+
+| コマンド | 何をするか |
+|---|---|
+| `awsp console` | いまの `AWS_PROFILE` の account / role でコンソールを開く |
+| `awsp console prod` | 指定 profile で開く |
+| `awsp console prod <URL>` | Slack やチケットで渡されたコンソールの URL を、そのアカウントで開く。URL は https の AWS コンソールに限る |
+| `awsp console --no-browser` | 開かずに URL を表示するだけ |
+| `awsp console --json` | profile / account / role / url を JSON で出す |
+
+SSO を使わない profile(`source_profile` や静的認証情報)では deep link を組めないので、エラーになります。
+
 ## 認証状態とログイン
 
 | コマンド | 何をするか |
@@ -123,7 +138,7 @@ Authorization Code + PKCE を Go で実装しています。`awsp login` は 127
 
 ## JSON 出力
 
-`current` / `list` / `status` / `login` / `whoami` は `--json` で機械可読になります。すべて `schemaVersion` を持ち、トークン値は含みません。`list --json` は `AWS_PROFILE` が設定されていれば `currentProfile` にその名前を載せます。成功時の stdout 全体が 1 つの JSON になり、承認 URL や案内は stderr に出ます。whoami はフラットな profile / account / userId / arn、login は CLI と MCP 共通の型です。
+`current` / `list` / `status` / `login` / `whoami` / `console` は `--json` で機械可読になります。すべて `schemaVersion` を持ち、トークン値は含みません。`list --json` は `AWS_PROFILE` が設定されていれば `currentProfile` にその名前を載せます。成功時の stdout 全体が 1 つの JSON になり、承認 URL や案内は stderr に出ます。whoami はフラットな profile / account / userId / arn、login は CLI と MCP 共通の型です。
 
 ```text
 $ awsp status --json

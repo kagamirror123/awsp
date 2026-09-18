@@ -14,7 +14,7 @@ func TestRenderPosixInitScript(t *testing.T) {
 				"# awsp " + shell + " integration",
 				`if [[ "$1" == -* ]]; then`,
 				`if [[ "$_arg" == "--shell" || "$_arg" == --shell=* ]]; then`,
-				`current|list|completion|help|init|version|status|preflight|login|whoami|mcp|__complete|__completeNoDesc)`,
+				`current|list|completion|help|init|version|status|preflight|login|whoami|console|mcp|__complete|__completeNoDesc)`,
 				`"/usr/local/bin/awsp" "$@" --shell)`,
 			} {
 				if !strings.Contains(script, want) {
@@ -30,7 +30,7 @@ func TestRenderFishInitScript(t *testing.T) {
 
 	for _, want := range []string{
 		"function awsp",
-		`case current list completion help init version status preflight login whoami mcp __complete __completeNoDesc`,
+		`case current list completion help init version status preflight login whoami console mcp __complete __completeNoDesc`,
 		`string match -q -r -- '^--shell(=.*)?$' "$_arg"`,
 		`string match -q -- '-*' "$argv[1]"`,
 		`set -l _awsp_exports ("/usr/local/bin/awsp" $argv --shell=fish)`,

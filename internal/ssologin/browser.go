@@ -22,6 +22,12 @@ func openBrowserAt(opts Options, flow *Flow, authURL string) {
 	}
 }
 
+// OpenBrowser は OS 標準のコマンドで URL をブラウザで開く
+// ログイン以外(awsp console など)からも同じ起動処理を使うために公開する
+func OpenBrowser(rawURL string) error {
+	return defaultOpenBrowser(rawURL)
+}
+
 // defaultOpenBrowser は OS 標準のコマンドでブラウザを起動する
 func defaultOpenBrowser(rawURL string) error {
 	var cmd *exec.Cmd
