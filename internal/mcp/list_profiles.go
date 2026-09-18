@@ -26,11 +26,12 @@ func (h *handlers) listProfiles(ctx context.Context, _ *sdkmcp.CallToolRequest, 
 	}
 
 	list, err := awsp.BuildProfileList(profiles, sessions, awsp.ProfileListOptions{
-		ConfigFile:  h.deps.Profiles.ConfigPath(),
-		SSOCacheDir: h.deps.SSOCacheDir,
-		CLICacheDir: h.deps.CLICacheDir,
-		Grace:       defaultGrace,
-		Now:         h.deps.now(),
+		ConfigFile:     h.deps.Profiles.ConfigPath(),
+		CurrentProfile: h.deps.currentProfile(),
+		SSOCacheDir:    h.deps.SSOCacheDir,
+		CLICacheDir:    h.deps.CLICacheDir,
+		Grace:          defaultGrace,
+		Now:            h.deps.now(),
 	})
 	if err != nil {
 		return nil, awsp.ProfileList{}, err

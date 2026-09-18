@@ -53,6 +53,9 @@ func NewServer(ctx context.Context, deps Deps, impl *sdkmcp.Implementation) *sdk
 		Name: "list_profiles",
 		Description: "List the AWS profiles found in the AWS config, along with the SSO session state and " +
 			"role credential cache timestamps for each. Reads only local files; makes no network calls. " +
+			"currentProfile, when present, is the profile the human has selected in their shell (AWS_PROFILE); " +
+			"prefer it when the task does not say which profile to use. It may name a profile that is not in " +
+			"this config if the human and the agent read different config files. " +
 			d11Note + " " + noTokenNote,
 		Annotations: &sdkmcp.ToolAnnotations{
 			ReadOnlyHint:  true,

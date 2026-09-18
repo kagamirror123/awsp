@@ -45,6 +45,8 @@ func newMCPCmd() *cobra.Command {
 				NewOIDCClient: func(region string) ssologin.OIDCClient {
 					return ssooidc.New(ssooidc.Options{Region: region})
 				},
+				// 起動元シェルの AWS_PROFILE を人間の選択としてエージェントに伝える(D30)
+				CurrentProfile: func() string { return os.Getenv("AWS_PROFILE") },
 			}
 
 			server := mcpserver.NewServer(cmd.Context(), deps, &sdkmcp.Implementation{

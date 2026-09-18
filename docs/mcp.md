@@ -23,7 +23,7 @@ args = ["mcp"]
 | ツール | 何をするか | ネットワーク |
 |---|---|---|
 | `auth_status` | SSO セッションの有効・失効。作業の最初に呼ぶ | 使わない |
-| `list_profiles` | profile 一覧と account / role / 認証状態 | 使わない |
+| `list_profiles` | profile 一覧と account / role / 認証状態。`currentProfile` に人間がシェルで選んでいる profile(サーバーが引き継いだ `AWS_PROFILE`)を返す | 使わない |
 | `whoami` | 指定 profile の caller identity。自動ログインしない | STS |
 | `login` | ログインを起こし、人がブラウザで承認するまで待ってから返る | SSO OIDC、profile 指定時は STS |
 
@@ -52,6 +52,8 @@ MCP を登録すると、エージェントはツールの説明を読んで次�
 
 profile の切り替えは人間のシェル関数が行います。MCP からエージェント側の環境変数は変えられないので、
 エージェントは `list_profiles` で得た名前を `aws ... --profile <name>` に渡して使います。
+どの profile を使うか指示が無いときは `currentProfile`(人間がシェルで選んでいるもの)を使うようツールの説明で誘導しています。
+人間用と AI 用で config を分けている場合、`currentProfile` がその config に無い名前のこともあります。
 
 ## 人間と AI で config を分ける
 

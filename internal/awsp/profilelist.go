@@ -37,6 +37,9 @@ type ProfileList struct {
 	SchemaVersion int `json:"schemaVersion"`
 	// ConfigFile は読み取り元の AWS config パス(D5)
 	ConfigFile string `json:"configFile"`
+	// CurrentProfile は実行環境の AWS_PROFILE(D30)。人間がシェルで選んでいる profile で 未設定なら省略
+	// この config に無い名前のこともある(人間用と AI 用で config を分けている場合など)
+	CurrentProfile string `json:"currentProfile,omitempty"`
 	// Profiles は profile 一覧
 	Profiles []ProfileInfo `json:"profiles"`
 }
@@ -45,6 +48,8 @@ type ProfileList struct {
 type ProfileListOptions struct {
 	// ConfigFile は出力にそのまま載せる AWS config のパス
 	ConfigFile string
+	// CurrentProfile は出力にそのまま載せる AWS_PROFILE の値(D30)。空なら省略される
+	CurrentProfile string
 	// SSOCacheDir は ~/.aws/sso/cache のディレクトリ 未指定時は ssocache.DefaultCacheDir()
 	SSOCacheDir string
 	// CLICacheDir は ~/.aws/cli/cache のディレクトリ 未指定時は算出しない(§6.2 の付加情報は空になる)
@@ -126,8 +131,9 @@ func BuildProfileList(profiles []awsconfig.Profile, sessions []awsconfig.SSOSess
 	}
 
 	return ProfileList{
-		SchemaVersion: 1,
-		ConfigFile:    opts.ConfigFile,
-		Profiles:      infos,
+		SchemaVersion:  1,
+		ConfigFile:     opts.ConfigFile,
+		CurrentProfile: opts.CurrentProfile,
+		Profiles:       infos,
 	}, nil
 }

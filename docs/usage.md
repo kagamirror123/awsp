@@ -123,7 +123,7 @@ Authorization Code + PKCE を Go で実装しています。`awsp login` は 127
 
 ## JSON 出力
 
-`current` / `list` / `status` / `login` / `whoami` は `--json` で機械可読になります。すべて `schemaVersion` を持ち、トークン値は含みません。成功時の stdout 全体が 1 つの JSON になり、承認 URL や案内は stderr に出ます。whoami はフラットな profile / account / userId / arn、login は CLI と MCP 共通の型です。
+`current` / `list` / `status` / `login` / `whoami` は `--json` で機械可読になります。すべて `schemaVersion` を持ち、トークン値は含みません。`list --json` は `AWS_PROFILE` が設定されていれば `currentProfile` にその名前を載せます。成功時の stdout 全体が 1 つの JSON になり、承認 URL や案内は stderr に出ます。whoami はフラットな profile / account / userId / arn、login は CLI と MCP 共通の型です。
 
 ```text
 $ awsp status --json
