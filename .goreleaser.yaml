@@ -36,6 +36,10 @@ archives:
     formats:
       - binary
 
+# SBOM(D27): アーカイブごとに syft で SPDX JSON を生成し Release に添付する
+sboms:
+  - artifacts: archive
+
 checksum:
   name_template: checksums.txt
 
