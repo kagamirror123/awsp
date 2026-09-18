@@ -100,6 +100,8 @@ total=3  current=dev
 | bash | `echo 'eval "$(awsp init bash)"' >> ~/.bashrc` |
 | fish | `echo 'awsp init fish \| source' >> ~/.config/fish/config.fish` |
 
+`awsp de<Tab>` で profile 名が補完されます。Homebrew で入れた場合は補完スクリプトも一緒に入ります。手で置くなら `awsp completion zsh|bash|fish`。
+
 ## 🤖 AI エージェントから使う
 
 ```bash
@@ -109,7 +111,7 @@ claude mcp add awsp -- awsp mcp
 | ツール | 何をするか |
 |---|---|
 | `auth_status` | SSO セッションの有効・失効。ネットワークなし |
-| `list_profiles` | profile 一覧と account / role / 認証状態 |
+| `list_profiles` | profile 一覧と account / role / 認証状態。人間がシェルで選んでいる profile(`currentProfile`)も返す |
 | `whoami` | 指定 profile の caller identity |
 | `login` | ログインを起こし、人がブラウザで承認するまで待ってから返る |
 

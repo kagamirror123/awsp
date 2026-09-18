@@ -42,6 +42,16 @@ type Deps struct {
 	OpenBrowser func(url string) error
 	// Now は現在時刻を返す 未指定時は time.Now
 	Now func() time.Time
+	// CurrentProfile は人間がシェルで選んでいる profile(D30)。本番では os.Getenv("AWS_PROFILE")
+	// MCP サーバーは Claude Code などの起動元シェルの環境を引き継ぐので その値がそのまま人間の選択になる
+	CurrentProfile func() string
+}
+
+func (d Deps) currentProfile() string {
+	if d.CurrentProfile != nil {
+		return d.CurrentProfile()
+	}
+	return ""
 }
 
 func (d Deps) now() time.Time {

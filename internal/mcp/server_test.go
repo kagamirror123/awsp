@@ -212,6 +212,47 @@ func TestListProfiles_ReturnsProfileList(t *testing.T) {
 	}
 }
 
+func TestListProfiles_IncludesCurrentProfile(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	deps := baseDeps(t)
+	deps.Profiles = &fakeProfileStore{profiles: []awsconfig.Profile{{Name: "dev"}}, configPath: "/tmp/config"}
+	// 人間用 config にしか無い名前でも そのまま伝える(D30)
+	deps.CurrentProfile = func() string { return "prod-admin" }
+
+	cs := testServer(ctx, t, deps)
+	res, err := cs.CallTool(ctx, &sdkmcp.CallToolParams{Name: "list_profiles", Arguments: map[string]any{}})
+	if err != nil || res.IsError {
+		t.Fatalf("list_profiles が失敗: err=%v isError=%v", err, res != nil && res.IsError)
+	}
+
+	var got awsp.ProfileList
+	decodeStructured(t, res.StructuredContent, &got)
+	if got.CurrentProfile != "prod-admin" {
+		t.Fatalf("CurrentProfile が想定外: %q", got.CurrentProfile)
+	}
+}
+
+func TestListProfiles_OmitsCurrentProfileWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	deps := baseDeps(t)
+	deps.Profiles = &fakeProfileStore{profiles: []awsconfig.Profile{{Name: "dev"}}, configPath: "/tmp/config"}
+
+	cs := testServer(ctx, t, deps)
+	res, err := cs.CallTool(ctx, &sdkmcp.CallToolParams{Name: "list_profiles", Arguments: map[string]any{}})
+	if err != nil || res.IsError {
+		t.Fatalf("list_profiles が失敗: err=%v", err)
+	}
+	if raw, ok := res.StructuredContent.(map[string]any); ok {
+		if _, present := raw["currentProfile"]; present {
+			t.Fatalf("AWS_PROFILE 未設定なのに currentProfile が出力に含まれている: %v", raw["currentProfile"])
+		}
+	}
+}
+
 func TestWhoami_Success(t *testing.T) {
 	t.Parallel()
 

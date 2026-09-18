@@ -70,7 +70,7 @@
 - `awsp whoami [profile]`(省略時は AWS_PROFILE)
 - `awsp mcp`
 - `awsp init zsh|bash|fish`
-- `awsp completion zsh`
+- `awsp completion zsh|bash|fish`(profile 名の補完付き。D29)
 
 ## 開発コマンド
 

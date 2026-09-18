@@ -13,6 +13,9 @@
 # Task cache
 /.task/
 
+# goreleaser が生成する補完スクリプト
+/completions/
+
 # Code coverage and profiling artifacts
 *.out
 coverage.*

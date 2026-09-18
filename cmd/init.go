@@ -11,8 +11,11 @@ import (
 )
 
 // passthroughSubcommands は親シェルの関数がそのままバイナリへ渡すサブコマンド名
+// __complete と __completeNoDesc は Cobra の補完スクリプトが呼ぶ隠しコマンド(D29)
+// これを素通ししないと 関数が profile 切り替えと誤解して --shell を付けてしまう
 var passthroughSubcommands = []string{
 	"current", "list", "completion", "help", "init", "version", "status", "preflight", "login", "whoami", "mcp",
+	"__complete", "__completeNoDesc",
 }
 
 func newInitCmd() *cobra.Command {

@@ -7,6 +7,8 @@ before:
     - go mod tidy
     - go test ./...
     - go vet ./...
+    # 補完スクリプトを生成して tar.gz と cask に同梱する(D29)。zsh は Homebrew が _awsp に改名する
+    - sh -c "mkdir -p completions && go run . completion bash > completions/awsp.bash && go run . completion zsh > completions/awsp.zsh && go run . completion fish > completions/awsp.fish"
 
 builds:
   - id: awsp
@@ -29,6 +31,10 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - tar.gz
+    files:
+      - LICENSE
+      - README.md
+      - completions/*
   - id: raw
     ids:
       - awsp
@@ -60,6 +66,10 @@ homebrew_casks:
     license: MIT
     binaries:
       - awsp
+    completions:
+      bash: completions/awsp.bash
+      zsh: completions/awsp.zsh
+      fish: completions/awsp.fish
     caveats: |
       シェル連携を設定すると awsp <profile> が親シェルに反映されます:
         zsh : echo 'eval "$(awsp init zsh)"' >> ~/.zshrc

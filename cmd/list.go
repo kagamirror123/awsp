@@ -46,10 +46,11 @@ func newListCmd() *cobra.Command {
 				}
 
 				list, err := awsp.BuildProfileList(profiles, sessions, awsp.ProfileListOptions{
-					ConfigFile:  profileStore.ConfigPath(),
-					SSOCacheDir: ssoCacheDir,
-					CLICacheDir: cliCacheDir,
-					Grace:       defaultGrace,
+					ConfigFile:     profileStore.ConfigPath(),
+					CurrentProfile: os.Getenv("AWS_PROFILE"),
+					SSOCacheDir:    ssoCacheDir,
+					CLICacheDir:    cliCacheDir,
+					Grace:          defaultGrace,
 				})
 				if err != nil {
 					return err

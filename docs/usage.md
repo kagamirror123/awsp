@@ -13,6 +13,14 @@
 | `awsp whoami [profile]` | caller identity を確認するだけ。自動ログインしない。省略時は `AWS_PROFILE` |
 | `awsp list` | 一覧。認証状態と残り時間、認証情報取得時刻も見える |
 
+`awsp de<Tab>` で profile 名を補完できます。`login` と `whoami` の引数も同じです。Homebrew で入れた場合は補完スクリプトが一緒に入ります。手で置く場合は次のように生成します。
+
+```bash
+awsp completion zsh > ~/.zsh/completions/_awsp          # fpath に含まれる場所へ
+awsp completion bash > /etc/bash_completion.d/awsp
+awsp completion fish > ~/.config/fish/completions/awsp.fish
+```
+
 対話 UI は広い端末では左に一覧、右に詳細を表示し、狭い端末では縦に並べます。各行に状態と残り時間が付き、現在の profile を ● で示して初期選択します。詳細が収まらない場合は PgUp/PgDn でスクロールできます。
 
 文字入力で検索を開始できます。q は検索中には文字として入力でき、検索中以外は中止に使います。q で始まる検索は / を押してから入力してください。Ctrl+C はどの状態でも中止します。
@@ -115,7 +123,7 @@ Authorization Code + PKCE を Go で実装しています。`awsp login` は 127
 
 ## JSON 出力
 
-`current` / `list` / `status` / `login` / `whoami` は `--json` で機械可読になります。すべて `schemaVersion` を持ち、トークン値は含みません。成功時の stdout 全体が 1 つの JSON になり、承認 URL や案内は stderr に出ます。whoami はフラットな profile / account / userId / arn、login は CLI と MCP 共通の型です。
+`current` / `list` / `status` / `login` / `whoami` は `--json` で機械可読になります。すべて `schemaVersion` を持ち、トークン値は含みません。`list --json` は `AWS_PROFILE` が設定されていれば `currentProfile` にその名前を載せます。成功時の stdout 全体が 1 つの JSON になり、承認 URL や案内は stderr に出ます。whoami はフラットな profile / account / userId / arn、login は CLI と MCP 共通の型です。
 
 ```text
 $ awsp status --json
