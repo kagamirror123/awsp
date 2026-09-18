@@ -118,6 +118,7 @@ claude mcp add awsp -- awsp mcp
 - ログインは aws CLI を exec せず SDK(ssooidc)で PKCE を内製。トークンキャッシュは CLI と完全互換
 - 状態確認はローカルファイルだけ。ネットワークを使うのは `whoami` と `login` だけ
 - 描画は Lip Gloss v2 と Bubble Tea v2。非 TTY と `NO_COLOR` では装飾を落とし、表は端末幅に収める
+- 配布は macOS と Linux(amd64 / arm64)
 
 決定と却下した案の記録は **[docs/design.md](docs/design.md)**。
 
