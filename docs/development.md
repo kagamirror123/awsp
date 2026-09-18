@@ -54,7 +54,7 @@ task release-snapshot
 
 - CI: `main` push / Pull Request で format lint test
 - CD: `v*` タグ push で GoReleaser が GitHub Release を作成し、Homebrew tap(`kagamirror123/homebrew-tap`)の cask を更新
-- Dependabot の PR は CI 通過で自動マージされ、main に入ると patch を自動タグしてリリースまで進む(`auto-release.yml`)
+- Dependabot の PR は CI 通過で自動マージされる。マージ後は定期実行の `auto-release.yml`(平日 10〜18 時 JST に毎時)が main の HEAD を見て、未タグかつ author が dependabot なら patch を自動タグしてリリースする。手動で起動するなら Actions の workflow_dispatch
 - tap の更新には Secrets の `HOMEBREW_TAP_GITHUB_TOKEN`(homebrew-tap への contents: write を持つ fine-grained PAT)が必要
 
 ## Contributing
