@@ -50,9 +50,11 @@ homebrew_casks:
       owner: kagamirror123
       name: homebrew-tap
       # GITHUB_TOKEN は awsp リポジトリにしか届かないため tap 用の fine-grained PAT を使う
-      token: '{{ envOrDefault "HOMEBREW_TAP_GITHUB_TOKEN" "" }}'
-    # PAT が未設定なら cask の生成だけ行い push しない(Release 本体は止めない)
-    skip_upload: '{{ if envOrDefault "HOMEBREW_TAP_GITHUB_TOKEN" "" }}false{{ else }}true{{ end }}'
+      # token は goreleaser が `{{ .Env.X }}` 単独の形しか受け付けない(関数や条件は書けない)
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    # PAT が未設定(ローカルの snapshot)か空(Secrets 未登録)なら cask の生成だけ行い push しない
+    # and は短絡評価なので 未設定のときに .Env.X の missingkey エラーにはならない
+    skip_upload: '{{ if and (isEnvSet "HOMEBREW_TAP_GITHUB_TOKEN") .Env.HOMEBREW_TAP_GITHUB_TOKEN }}false{{ else }}true{{ end }}'
     homepage: https://github.com/kagamirror123/awsp
     description: AWS profile switcher with SSO status, PKCE login and an MCP server for AI agents
     license: MIT
