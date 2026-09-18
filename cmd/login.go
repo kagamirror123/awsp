@@ -34,8 +34,9 @@ func newLoginCmdWithRunner(opts *rootOptions, runLogin loginRunner) *cobra.Comma
 		Short: "ブラウザ承認で AWS SSO にログイン(既定: Authorization Code + PKCE)",
 		Example: "  awsp login\n  awsp login dev\n  awsp login --sso-session corp\n  " +
 			"awsp login --timeout 3m\n  awsp login --force\n  awsp login --use-device-code",
-		Args:         cobra.MaximumNArgs(1),
-		SilenceUsage: true,
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeProfileNames,
+		SilenceUsage:      true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var profileArg string
 			if len(args) == 1 {

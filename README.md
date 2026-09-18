@@ -100,6 +100,8 @@ total=3  current=dev
 | bash | `echo 'eval "$(awsp init bash)"' >> ~/.bashrc` |
 | fish | `echo 'awsp init fish \| source' >> ~/.config/fish/config.fish` |
 
+`awsp de<Tab>` で profile 名が補完されます。Homebrew で入れた場合は補完スクリプトも一緒に入ります。手で置くなら `awsp completion zsh|bash|fish`。
+
 ## 🤖 AI エージェントから使う
 
 ```bash

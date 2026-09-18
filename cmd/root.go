@@ -158,9 +158,10 @@ func newRootCmd() *cobra.Command {
 			"  awsp init zsh",
 			"  awsp init fish",
 		}, "\n"),
-		Args:          cobra.MaximumNArgs(1),
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeProfileNames,
+		SilenceUsage:      true,
+		SilenceErrors:     true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			shellSyntax, err := awsp.ParseShellSyntax(opts.shell)
 			if err != nil {
@@ -292,7 +293,7 @@ func newCompletionCmd(rootCmd *cobra.Command) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "completion [bash|zsh|fish|powershell]",
 		Short:                 "シェル補完スクリプトを生成",
-		Example:               "  awsp completion zsh > ~/.zsh/completions/_awsp",
+		Example:               "  awsp completion zsh > ~/.zsh/completions/_awsp\n  awsp completion bash > /etc/bash_completion.d/awsp\n  awsp completion fish > ~/.config/fish/completions/awsp.fish",
 		Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
 		DisableFlagsInUseLine: true,

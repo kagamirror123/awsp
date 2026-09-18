@@ -15,11 +15,12 @@ func newWhoamiCmd() *cobra.Command {
 	var jsonOutput bool
 
 	cmd := &cobra.Command{
-		Use:          "whoami [profile]",
-		Short:        "指定 profile の caller identity を表示(省略時は AWS_PROFILE。自動ログインしない)",
-		Example:      "  awsp whoami\n  awsp whoami dev\n  awsp whoami dev --json",
-		Args:         cobra.MaximumNArgs(1),
-		SilenceUsage: true,
+		Use:               "whoami [profile]",
+		Short:             "指定 profile の caller identity を表示(省略時は AWS_PROFILE。自動ログインしない)",
+		Example:           "  awsp whoami\n  awsp whoami dev\n  awsp whoami dev --json",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeProfileNames,
+		SilenceUsage:      true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profile, source, err := resolveWhoamiProfile(args)
 			if err != nil {
