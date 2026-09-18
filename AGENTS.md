@@ -93,4 +93,4 @@
 - `Taskfile` は `mise` がある場合に自動で `mise exec` を使う
 - `awsp init zsh|bash|fish` で関数を導入すると `awsp <profile>` 実行時に親シェルへ反映される
 - `--shell` はその関数が内部で使う出力モード。値なしは posix(export / unset)、`--shell=fish` は set -gx / set -e
-- 配布は darwin / linux のみ(Windows は D25 で対象外)
+- 配布は darwin / linux のみ(Windows は D25 で対象外)。依存更新は Dependabot → CI 通過で auto-merge → patch を自動タグしてリリース(D26)

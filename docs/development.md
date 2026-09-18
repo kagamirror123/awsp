@@ -54,6 +54,7 @@ task release-snapshot
 
 - CI: `main` push / Pull Request で format lint test
 - CD: `v*` タグ push で GoReleaser が GitHub Release を作成
+- Dependabot の PR は CI 通過で自動マージされ、main に入ると patch を自動タグしてリリースまで進む(`auto-release.yml`)
 
 ## Contributing
 

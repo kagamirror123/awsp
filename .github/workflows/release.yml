@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*"
+  # auto-release.yml から同じ実行内で呼ぶための入口(D26)
+  workflow_call:
 
 permissions:
   contents: write

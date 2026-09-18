@@ -1,6 +1,6 @@
 # awsp 設計ドキュメント: AI ネイティブ化
 
-状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正と D24〜D25 を反映。設計の正典はこのファイル。
+状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正と D24〜D26 を反映。設計の正典はこのファイル。
 確定した項目は「決定事項」へ、退けた案は「却下した案」へ移し、理由を必ず残す。
 
 ## 1. 目的
@@ -58,6 +58,7 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | D23 | ログインのやり直し | CLI に `awsp login --force` を足す(有効でもログインし直す)。MCP の `login` には出さない | 画面や挙動を確認したいときに手段が無かった。エージェント側に出さないのは、有効なのにブラウザを開かせる操作を自律的に選ばせたくないため(D4 の「有効なら即返す」を MCP では守る) |
 | D24 | シェル連携 | `awsp init` は zsh / bash / fish の 3 つ。`--shell` は値なしで posix(export / unset)、`--shell=fish` で fish 構文(`set -gx` / `set -q ...; and set -e -g`)。fish 向けの出力は各行を `;` で終える | `completion` が 4 シェル対応なのに切り替え本体が zsh 専用なのは公開ツールとして目立つ穴。bash は zsh と同じ関数で動く。fish は `export` / `unset` を持たないので構文を分ける。行末の `;` は fish が command substitution を行のリストにし eval が空白で連結するため。PowerShell は D25 で Windows を外すので作らない(2026-09-18) |
 | D25 | Windows | ビルド対象から外す(darwin / linux の amd64 / arm64 のみ) | ブラウザ自動起動が未実装、シェル連携が無く、作者に検証環境も無い。動かないバイナリを配るより正直に外す。需要が出たら `BROWSER` 環境変数の尊重と PowerShell 連携を揃えて戻す(2026-09-18) |
+| D26 | 依存更新の自動化 | Dependabot(gomod / github-actions、週次、エコシステムごとに 1 PR にグループ化)→ CI 通過で auto-merge(squash)→ main への push で patch を自動タグ → goreleaser。Go モジュールの semver-major だけは auto-merge から除外して人が見る。人間の PR は従来どおり `task release-tag` | 依存更新の PR を人が眺める価値は無く、CI が門番になっている。GITHUB_TOKEN で push したタグは `release.yml` の tag トリガーを起動しないので、タグ作成と同じ実行内で `release.yml` を reusable workflow として呼ぶ。リポジトリ側の前提: "Allow auto-merge" 有効、main のルールセットが `CI / Lint and Test` を必須(既存)(2026-09-18) |
 
 ## 5. 却下した案
 
@@ -138,7 +139,7 @@ CLI は成功時だけ JSON を stdout に出し、URL・承認案内は stderr 
 
 AWS_CONFIG_FILE、JSON、非 TTY、status / preflight、PKCE login、MCP、描画の統一は実装済み。
 派生 config 生成は撤回済み(D15)。2026-09-18 のレビューで認証復旧、破損キャッシュ、MCP の並行処理と期限、JSON 出力、TUI の端末幅への対応を修正した。
-同日に D24〜D25 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
+同日に D24〜D26 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
 
 D12 の実 AWS での確認は 2026-09-16 に実施済み: `awsp login <profile>` が書いたキャッシュで `aws sts get-caller-identity --profile <profile>` が成功し、トークンファイルのキーは CLI と同じ 8 個、権限 0600、refreshToken あり。レビュー修正の自動テストでは実 AWS を使わず、OIDC/STS のフェイク、隔離したキャッシュ、localhost のコールバックを使う。
 
