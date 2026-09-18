@@ -155,6 +155,7 @@ func newRootCmd() *cobra.Command {
 			"  awsp preflight",
 			"  awsp login",
 			"  awsp whoami dev",
+			"  awsp console",
 			"  awsp init zsh",
 			"  awsp init fish",
 		}, "\n"),
@@ -259,6 +260,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newPreflightCmd())
 	cmd.AddCommand(newLoginCmd(opts))
 	cmd.AddCommand(newWhoamiCmd())
+	cmd.AddCommand(newConsoleCmd())
 	cmd.AddCommand(newCompletionCmd(cmd))
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newMCPCmd())

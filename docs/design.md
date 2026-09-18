@@ -1,6 +1,6 @@
 # awsp 設計ドキュメント: AI ネイティブ化
 
-状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正と D24〜D30 を反映。設計の正典はこのファイル。
+状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正と D24〜D31 を反映。設計の正典はこのファイル。
 確定した項目は「決定事項」へ、退けた案は「却下した案」へ移し、理由を必ず残す。
 
 ## 1. 目的
@@ -63,6 +63,7 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | D28 | Homebrew tap | goreleaser の `homebrew_casks` で `kagamirror123/homebrew-tap` に cask を自動生成・push。`brew install --cask kagamirror123/tap/awsp`。未署名バイナリなので post-install で quarantine 属性を外す。Linux は Releases の curl のまま | goreleaser は v2.10 以降 `brews`(formula)を非推奨にし、バイナリ配布は cask を推奨している。cask は macOS 専用だが awsp の利用者は macOS が主で、Linux に Homebrew を入れている人はまれ。tap への push は GITHUB_TOKEN では届かないので fine-grained PAT を Secrets に置く(2026-09-18) |
 | D29 | profile 名の補完 | `awsp` / `login` / `whoami` の位置引数に Cobra の ValidArgsFunction で config の profile 名を返す。補完スクリプトはリリース時に生成して tar.gz と cask に同梱する(Homebrew が zsh の `awsp.zsh` を `_awsp` に改名する)。シェル関数は `__complete` / `__completeNoDesc` を素通しする | 十数個の profile 名を正確に打つのは負担で、TUI を開くより `awsp de<Tab>` のほうが速い。読むのは config だけでネットワークは使わない。`(unset)` は括弧の補完エスケープが読みにくいので候補に入れない。素通しを忘れると関数が補完呼び出しを切り替えと誤解して `--shell` を付ける(2026-09-19) |
 | D30 | currentProfile | `list --json` と MCP の `list_profiles` に `currentProfile`(プロセスの `AWS_PROFILE`)を載せる。MCP サーバーは起動元シェルの環境を引き継ぐので、それが人間の選択になる。ツール説明で「指示が無ければこれを使う」と誘導する。schemaVersion は 1 のまま(任意フィールドの追加) | エージェントは D11 で切り替えを持たず、どの profile で叩くべきかを推測か質問で決めていた。人間の選択を 1 フィールドで伝えれば往復が減る。人間用と AI 用で config を分けている場合はこの config に無い名前になり得るので、その旨を説明に書く(2026-09-19) |
+| D31 | コンソールを開く | `awsp console [profile] [url]`。IAM Identity Center のアクセスポータルの deep link(`<start_url>/#/console?account_id=…&role_name=…[&destination=…]`)を組んでブラウザで開く。profile 省略時は AWS_PROFILE。destination は https の AWS コンソール(`*.aws.amazon.com` / `*.amazonaws.com` 系)に限る。`--no-browser` と `--json` あり。MCP には出さない | awsee を中止したとき「GUI に残る価値はコンソール deep link だけ」と判断した、その 1 点を CLI に持つ。ターミナルで使っている profile のままコンソールへ移れる。Slack やチケットのコンソール URL はサインイン中のアカウントに飛ぶので、destination で正しいアカウントに向ける。URL を組んで開くだけでトークンに触れず、ネットワークも使わない。エージェントにブラウザを開かせる用途は無いので MCP ツールにしない。SSO を使わない profile は federation(GetSigninToken に認証情報を送る)が要るので対象外(2026-09-19) |
 
 ## 5. 却下した案
 
@@ -115,6 +116,7 @@ CLI は成功時だけ JSON を stdout に出し、URL・承認案内は stderr 
 | 認証状態 | `awsp status [--json]` / `awsp preflight` | auth_status |
 | profile 一覧 | `awsp list --json` | list_profiles |
 | caller identity | `awsp current --json` / `awsp whoami <profile>` | whoami |
+| コンソールを開く | `awsp console [profile] [url]` | なし(人間向け、D31) |
 | ログイン | `awsp login [profile]` | login |
 | 切り替え | `awsp <profile>`(zsh / bash / fish の関数、D24) | なし(D11) |
 | MCP 配信 | `awsp mcp` | - |
@@ -144,7 +146,7 @@ CLI は成功時だけ JSON を stdout に出し、URL・承認案内は stderr 
 
 AWS_CONFIG_FILE、JSON、非 TTY、status / preflight、PKCE login、MCP、描画の統一は実装済み。
 派生 config 生成は撤回済み(D15)。2026-09-18 のレビューで認証復旧、破損キャッシュ、MCP の並行処理と期限、JSON 出力、TUI の端末幅への対応を修正した。
-同日に D24〜D28 を実装。2026-09-19 に D29〜D30 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
+同日に D24〜D28 を実装。2026-09-19 に D29〜D31 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
 
 D12 の実 AWS での確認は 2026-09-16 に実施済み: `awsp login <profile>` が書いたキャッシュで `aws sts get-caller-identity --profile <profile>` が成功し、トークンファイルのキーは CLI と同じ 8 個、権限 0600、refreshToken あり。レビュー修正の自動テストでは実 AWS を使わず、OIDC/STS のフェイク、隔離したキャッシュ、localhost のコールバックを使う。
 

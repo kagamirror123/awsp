@@ -68,6 +68,7 @@
 - `awsp preflight`
 - `awsp login [profile]`
 - `awsp whoami [profile]`(省略時は AWS_PROFILE)
+- `awsp console [profile] [url]`(アクセスポータルの deep link でコンソールを開く。D31)
 - `awsp mcp`
 - `awsp init zsh|bash|fish`
 - `awsp completion zsh|bash|fish`(profile 名の補完付き。D29)
