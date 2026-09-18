@@ -45,3 +45,5 @@ jobs:
     uses: ./.github/workflows/release.yml
     permissions:
       contents: write
+    # HOMEBREW_TAP_GITHUB_TOKEN を呼び先へ渡す(D28)
+    secrets: inherit

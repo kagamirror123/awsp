@@ -40,6 +40,37 @@ archives:
 sboms:
   - artifacts: archive
 
+# Homebrew tap(D28): kagamirror123/homebrew-tap に cask を生成して push する
+# 旧来の brews(formula)は goreleaser v2.10 以降非推奨で バイナリ配布は cask が推奨
+homebrew_casks:
+  - name: awsp
+    ids:
+      - package
+    repository:
+      owner: kagamirror123
+      name: homebrew-tap
+      # GITHUB_TOKEN は awsp リポジトリにしか届かないため tap 用の fine-grained PAT を使う
+      token: '{{ envOrDefault "HOMEBREW_TAP_GITHUB_TOKEN" "" }}'
+    # PAT が未設定なら cask の生成だけ行い push しない(Release 本体は止めない)
+    skip_upload: '{{ if envOrDefault "HOMEBREW_TAP_GITHUB_TOKEN" "" }}false{{ else }}true{{ end }}'
+    homepage: https://github.com/kagamirror123/awsp
+    description: AWS profile switcher with SSO status, PKCE login and an MCP server for AI agents
+    license: MIT
+    binaries:
+      - awsp
+    caveats: |
+      シェル連携を設定すると awsp <profile> が親シェルに反映されます:
+        zsh : echo 'eval "$(awsp init zsh)"' >> ~/.zshrc
+        bash: echo 'eval "$(awsp init bash)"' >> ~/.bashrc
+        fish: echo 'awsp init fish | source' >> ~/.config/fish/config.fish
+    hooks:
+      post:
+        # バイナリは署名していないため Gatekeeper の quarantine 属性を外す(goreleaser 推奨の書き方)
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/awsp"]
+          end
+
 checksum:
   name_template: checksums.txt
 

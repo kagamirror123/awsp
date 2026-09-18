@@ -1,6 +1,6 @@
 # awsp 設計ドキュメント: AI ネイティブ化
 
-状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正と D24〜D27 を反映。設計の正典はこのファイル。
+状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正と D24〜D28 を反映。設計の正典はこのファイル。
 確定した項目は「決定事項」へ、退けた案は「却下した案」へ移し、理由を必ず残す。
 
 ## 1. 目的
@@ -52,7 +52,7 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | D17 | TUI の骨格 | 幅 96 文字以上では左一覧・右詳細、狭い端末では縦配置。詳細は PgUp/PgDn でスクロールし、画面内に収める | 使い慣れた形を壊す理由がない |
 | D18 | 失効後の猶予 | 既定 8 時間、`--grace` で変更可 | IAM Identity Center のセッション期間の既定が 8 時間で、refreshToken はその期間内だけ使える。キャッシュにはセッション終端が無いので expiresAt からの推定で代用する |
 | D19 | コマンド名 | `status` / `preflight` / `whoami` / `login` / `mcp`。`current` と `list` は残す | 既存利用者の手癖を壊さない |
-| D20 | 配布 | goreleaser 継続。Homebrew tap は別作業。MCP 登録は README に `claude mcp add awsp -- awsp mcp` を書き、生成コマンドは作らない | 登録は 1 行で済む |
+| D20 | 配布 | goreleaser 継続。Homebrew tap は D28 で追加。MCP 登録は README に `claude mcp add awsp -- awsp mcp` を書き、生成コマンドは作らない | 登録は 1 行で済む |
 | D21 | SessionStart フック | 作者環境では使わない。`awsp preflight` は使いたい人向けの CLI として残す | セッション毎にフック出力がコンテキストを消費するのが無駄。MCP の `login` で途中失効からの復帰が 1 呼び出し + ブラウザ 1 クリックになったので、開始時に先回りする価値が下がった(2026-09-16)。フックは authdoc のものを削除済み |
 | D22 | 表の幅 | 人間向けの表は端末幅(非 TTY なら COLUMNS、無ければ 120)に収める。優先度の低い列から落とし、それでも超えれば折り返す。ID 系の列は「…」で切る。一覧の中身(profile 名の列挙など)は件数にして表に入れない | 内容が長いと表が崩れ、読めなくなる(2026-09-16 に status の Profiles 列で実害)。表は概観、詳細は別コマンドか JSON |
 | D23 | ログインのやり直し | CLI に `awsp login --force` を足す(有効でもログインし直す)。MCP の `login` には出さない | 画面や挙動を確認したいときに手段が無かった。エージェント側に出さないのは、有効なのにブラウザを開かせる操作を自律的に選ばせたくないため(D4 の「有効なら即返す」を MCP では守る) |
@@ -60,6 +60,7 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | D25 | Windows | ビルド対象から外す(darwin / linux の amd64 / arm64 のみ) | ブラウザ自動起動が未実装、シェル連携が無く、作者に検証環境も無い。動かないバイナリを配るより正直に外す。需要が出たら `BROWSER` 環境変数の尊重と PowerShell 連携を揃えて戻す(2026-09-18) |
 | D26 | 依存更新の自動化 | Dependabot(gomod / github-actions、週次、エコシステムごとに 1 PR にグループ化)→ CI 通過で auto-merge(squash)→ main への push で patch を自動タグ → goreleaser。Go モジュールの semver-major だけは auto-merge から除外して人が見る。人間の PR は従来どおり `task release-tag` | 依存更新の PR を人が眺める価値は無く、CI が門番になっている。GITHUB_TOKEN で push したタグは `release.yml` の tag トリガーを起動しないので、タグ作成と同じ実行内で `release.yml` を reusable workflow として呼ぶ。リポジトリ側の前提: "Allow auto-merge" 有効、main のルールセットが `CI / Lint and Test` を必須(既存)(2026-09-18) |
 | D27 | SBOM | goreleaser の `sboms` で syft を使い、アーカイブごとに SPDX JSON を Release へ添付 | 公開バイナリの依存の証跡。設定 2 行と syft のインストール 1 ステップで済む。成果物の署名(cosign keyless)は未着手。Rekor の公開ログに記録が残る運用なので需要が見えてから(2026-09-18) |
+| D28 | Homebrew tap | goreleaser の `homebrew_casks` で `kagamirror123/homebrew-tap` に cask を自動生成・push。`brew install --cask kagamirror123/tap/awsp`。未署名バイナリなので post-install で quarantine 属性を外す。Linux は Releases の curl のまま | goreleaser は v2.10 以降 `brews`(formula)を非推奨にし、バイナリ配布は cask を推奨している。cask は macOS 専用だが awsp の利用者は macOS が主で、Linux に Homebrew を入れている人はまれ。tap への push は GITHUB_TOKEN では届かないので fine-grained PAT を Secrets に置く(2026-09-18) |
 
 ## 5. 却下した案
 
@@ -140,7 +141,7 @@ CLI は成功時だけ JSON を stdout に出し、URL・承認案内は stderr 
 
 AWS_CONFIG_FILE、JSON、非 TTY、status / preflight、PKCE login、MCP、描画の統一は実装済み。
 派生 config 生成は撤回済み(D15)。2026-09-18 のレビューで認証復旧、破損キャッシュ、MCP の並行処理と期限、JSON 出力、TUI の端末幅への対応を修正した。
-同日に D24〜D27 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
+同日に D24〜D28 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
 
 D12 の実 AWS での確認は 2026-09-16 に実施済み: `awsp login <profile>` が書いたキャッシュで `aws sts get-caller-identity --profile <profile>` が成功し、トークンファイルのキーは CLI と同じ 8 個、権限 0600、refreshToken あり。レビュー修正の自動テストでは実 AWS を使わず、OIDC/STS のフェイク、隔離したキャッシュ、localhost のコールバックを使う。
 

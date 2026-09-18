@@ -39,3 +39,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Homebrew tap(kagamirror123/homebrew-tap)へ cask を push するための fine-grained PAT(D28)
+          # GITHUB_TOKEN は awsp リポジトリにしか届かない
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
