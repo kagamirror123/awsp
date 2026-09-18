@@ -148,6 +148,13 @@ tasks:
     requires:
       vars:
         - VERSION
+    # タグはその時点の HEAD に付くため main で origin/main と一致しているときだけ許す
+    # (2026-09-18 に作業ブランチの先端へ v0.11.0 / v0.11.1 が付いた)
+    preconditions:
+      - sh: test "$(git branch --show-current)" = "main"
+        msg: 'release-tag は main で実行してください(git checkout main)'
+      - sh: git fetch -q origin main && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+        msg: 'HEAD が origin/main と一致しません(git pull --ff-only してから実行してください)'
     cmds:
       - git tag -a {{.VERSION}} -m "Release {{.VERSION}}"
       - git push origin {{.VERSION}}
