@@ -62,7 +62,7 @@ func newLoginCmdWithRunner(opts *rootOptions, runLogin loginRunner) *cobra.Comma
 			}
 
 			output := ui.NewWriter(cmd.OutOrStdout())
-			if opts.shell || jsonOutput {
+			if opts.shellMode() || jsonOutput {
 				output = ui.NewWriter(cmd.ErrOrStderr())
 			}
 

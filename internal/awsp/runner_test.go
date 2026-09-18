@@ -69,7 +69,7 @@ func TestRunShellMode(t *testing.T) {
 		Stderr:   stderr,
 	})
 
-	err := runner.Run(context.Background(), "", RunOptions{ShellMode: true})
+	err := runner.Run(context.Background(), "", RunOptions{Shell: ShellSyntaxPOSIX})
 	if err != nil {
 		t.Fatalf("Run が失敗: %v", err)
 	}
@@ -81,6 +81,74 @@ func TestRunShellMode(t *testing.T) {
 
 	if !bytes.Contains(stderr.Bytes(), []byte("Account : 1")) {
 		t.Fatalf("shell mode の情報出力先が想定外: %s", stderr.String())
+	}
+}
+
+func TestRunShellModeFish(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	runner := NewRunner(RunnerOptions{
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Profiles: stubProfileStore{profiles: []Profile{{Name: "it's-dev"}}},
+		Selector: stubSelector{selected: "it's-dev"},
+		AWS:      &stubAWSClient{identity: awscli.Identity{Account: "1", UserID: "u", ARN: "a"}},
+		Stdout:   stdout,
+		Stderr:   &bytes.Buffer{},
+	})
+
+	if err := runner.Run(context.Background(), "", RunOptions{Shell: ShellSyntaxFish}); err != nil {
+		t.Fatalf("Run が失敗: %v", err)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"set -gx AWS_SDK_LOAD_CONFIG 1;\n",
+		"set -gx AWS_PROFILE 'it\\'s-dev';\n",
+		"set -q AWS_ACCESS_KEY_ID; and set -e -g AWS_ACCESS_KEY_ID;\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("fish 出力に %q がない: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "export ") || strings.Contains(got, "unset ") {
+		t.Fatalf("fish 出力に POSIX 構文が混ざっている: %s", got)
+	}
+}
+
+func TestRunShellModeFishUnset(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	runner := NewRunner(RunnerOptions{
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Profiles: stubProfileStore{profiles: []Profile{{Name: "dev"}}},
+		Selector: stubSelector{selected: unsetSelection},
+		AWS:      &stubAWSClient{},
+		Stdout:   stdout,
+		Stderr:   &bytes.Buffer{},
+	})
+
+	if err := runner.Run(context.Background(), unsetSelection, RunOptions{Shell: ShellSyntaxFish}); err != nil {
+		t.Fatalf("Run が失敗: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "set -q AWS_PROFILE; and set -e -g AWS_PROFILE;\n") {
+		t.Fatalf("fish の解除出力が想定外: %s", stdout.String())
+	}
+}
+
+func TestParseShellSyntax(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]ShellSyntax{"": ShellSyntaxNone, "posix": ShellSyntaxPOSIX, "bash": ShellSyntaxPOSIX, "zsh": ShellSyntaxPOSIX, "fish": ShellSyntaxFish}
+	for in, want := range cases {
+		got, err := ParseShellSyntax(in)
+		if err != nil || got != want {
+			t.Fatalf("ParseShellSyntax(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	if _, err := ParseShellSyntax("powershell"); err == nil {
+		t.Fatal("未対応シェルがエラーにならなかった")
 	}
 }
 

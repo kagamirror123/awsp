@@ -53,11 +53,14 @@ source_profile = base
 
 トークン値・credentials は読み取っても出力せず、ログにも残しません。
 
-## zsh 連携
+## シェル連携
 
 ```bash
-echo 'eval "$(awsp init zsh)"' >> ~/.zshrc
+echo 'eval "$(awsp init zsh)"' >> ~/.zshrc                              # zsh
+echo 'eval "$(awsp init bash)"' >> ~/.bashrc                            # bash
+echo 'awsp init fish | source' >> ~/.config/fish/config.fish            # fish
 ```
 
-生成される関数は、`awsp <profile>` のときだけ `awsp <profile> --shell` を呼んでその出力(`export` / `unset`)を `eval` します。
+生成される関数は、`awsp <profile>` のときだけ `awsp <profile> --shell` を呼んでその出力を `eval` します。
+bash / zsh には `export` / `unset`、fish には `--shell=fish` で `set -gx` / `set -e` を返します。
 サブコマンド(`current` `list` `status` `login` など)はそのままバイナリに渡します。

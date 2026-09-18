@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"strings"
 
 	"github.com/kagamirror123/awsp/internal/awscli"
 	"github.com/kagamirror123/awsp/internal/awsconfig"
@@ -78,11 +79,44 @@ type Runner struct {
 	stderr   io.Writer
 }
 
+// ShellSyntax は --shell 出力(親シェルへ反映するコマンド)の構文(D24)
+type ShellSyntax string
+
+const (
+	// ShellSyntaxNone は人間向けの表示(--shell なし)
+	ShellSyntaxNone ShellSyntax = ""
+	// ShellSyntaxPOSIX は export / unset を使う構文(bash zsh)
+	ShellSyntaxPOSIX ShellSyntax = "posix"
+	// ShellSyntaxFish は set -gx / set -e を使う構文(fish)
+	ShellSyntaxFish ShellSyntax = "fish"
+)
+
+// ParseShellSyntax は --shell の値を ShellSyntax に変換する
+// 値なしの --shell は posix として扱う bash zsh は posix の別名
+func ParseShellSyntax(value string) (ShellSyntax, error) {
+	switch value {
+	case "":
+		return ShellSyntaxNone, nil
+	case "posix", "bash", "zsh":
+		return ShellSyntaxPOSIX, nil
+	case "fish":
+		return ShellSyntaxFish, nil
+	default:
+		return ShellSyntaxNone, fmt.Errorf("--shell の値が不正です: %q: posix か fish を指定してください", value)
+	}
+}
+
 // RunOptions は実行時の挙動を制御する
 type RunOptions struct {
-	ShellMode bool
+	// Shell が空でなければ人間向け表示の代わりに親シェル用のコマンドを stdout へ出す
+	Shell     ShellSyntax
 	SkipLogin bool
 	LoginOnly bool
+}
+
+// shellMode は --shell 出力モードかどうかを返す
+func (o RunOptions) shellMode() bool {
+	return o.Shell != ShellSyntaxNone
 }
 
 // NewRunner は依存を束ねて Runner を作る
@@ -118,25 +152,25 @@ func (r *Runner) Run(ctx context.Context, profileArg string, options RunOptions)
 		if options.LoginOnly {
 			return errors.New("login-only では (unset) を選択できません")
 		}
-		r.emitUnset(options.ShellMode)
+		r.emitUnset(options.Shell)
 		return nil
 	}
 
 	if !options.SkipLogin {
-		if err := r.ensureLoggedIn(ctx, selected, options.ShellMode); err != nil {
+		if err := r.ensureLoggedIn(ctx, selected, options.shellMode()); err != nil {
 			return err
 		}
 	}
 
 	if options.LoginOnly {
-		if options.ShellMode {
+		if options.shellMode() {
 			return nil
 		}
 		_, _ = fmt.Fprintln(r.stdout, ui.SuccessLine(fmt.Sprintf("Login status OK for profile=%s", selected)))
 		return nil
 	}
 
-	r.emitProfile(options.ShellMode, selected)
+	r.emitProfile(options.Shell, selected)
 	return nil
 }
 
@@ -240,23 +274,50 @@ func (r *Runner) resolveSession(ctx context.Context, profile string) (awsconfig.
 	return awsconfig.SSOSession{}, fmt.Errorf("指定プロファイルが見つかりません: %s", profile)
 }
 
-func (r *Runner) emitUnset(shellMode bool) {
-	if shellMode {
-		_, _ = fmt.Fprintln(r.stdout, "unset AWS_PROFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN")
-		return
+// staticCredentialVars は profile 切り替え時に解除する静的認証情報の環境変数
+var staticCredentialVars = []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"}
+
+func (r *Runner) emitUnset(shell ShellSyntax) {
+	switch shell {
+	case ShellSyntaxPOSIX:
+		_, _ = fmt.Fprintln(r.stdout, "unset AWS_PROFILE "+strings.Join(staticCredentialVars, " "))
+	case ShellSyntaxFish:
+		r.emitFishErase(append([]string{"AWS_PROFILE"}, staticCredentialVars...))
+	default:
+		_, _ = fmt.Fprintln(r.stdout, ui.InfoLine("AWS_PROFILE と静的認証情報を解除しました"))
 	}
-	_, _ = fmt.Fprintln(r.stdout, ui.InfoLine("AWS_PROFILE と静的認証情報を解除しました"))
 }
 
-func (r *Runner) emitProfile(shellMode bool, profile string) {
-	if shellMode {
+func (r *Runner) emitProfile(shell ShellSyntax, profile string) {
+	switch shell {
+	case ShellSyntaxPOSIX:
 		_, _ = fmt.Fprintln(r.stdout, "export AWS_SDK_LOAD_CONFIG=1")
 		_, _ = fmt.Fprintf(r.stdout, "export AWS_PROFILE=%q\n", profile)
-		_, _ = fmt.Fprintln(r.stdout, "unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN")
-		return
+		_, _ = fmt.Fprintln(r.stdout, "unset "+strings.Join(staticCredentialVars, " "))
+	case ShellSyntaxFish:
+		// fish の関数は出力を行のリストとして受け取り eval で 1 つに連結するため
+		// 行末の ; で連結後もコマンド境界が残るようにする
+		_, _ = fmt.Fprintln(r.stdout, "set -gx AWS_SDK_LOAD_CONFIG 1;")
+		_, _ = fmt.Fprintf(r.stdout, "set -gx AWS_PROFILE %s;\n", fishQuote(profile))
+		r.emitFishErase(staticCredentialVars)
+	default:
+		_, _ = fmt.Fprintln(r.stdout, ui.SuccessLine(fmt.Sprintf("Profile validated: %s", profile)))
+		_, _ = fmt.Fprintln(r.stdout, ui.InfoLine("この実行では親シェルの AWS_PROFILE は変更されません"))
 	}
-	_, _ = fmt.Fprintln(r.stdout, ui.SuccessLine(fmt.Sprintf("Profile validated: %s", profile)))
-	_, _ = fmt.Fprintln(r.stdout, ui.InfoLine("この実行では親シェルの AWS_PROFILE は変更されません"))
+}
+
+// emitFishErase は fish でグローバル変数を消すコマンドを 1 変数 1 行で出す
+// 未定義の変数を set -e すると status 1 になるため set -q で存在確認してから消す
+func (r *Runner) emitFishErase(names []string) {
+	for _, name := range names {
+		_, _ = fmt.Fprintf(r.stdout, "set -q %s; and set -e -g %s;\n", name, name)
+	}
+}
+
+// fishQuote は fish の単一引用符で値を包む 単一引用符内で意味を持つのは \ と ' だけ
+func fishQuote(value string) string {
+	escaped := strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(value)
+	return "'" + escaped + "'"
 }
 
 func (o RunOptions) validate() error {

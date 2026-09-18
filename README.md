@@ -46,7 +46,7 @@ AWSP_VERSION=$(curl -fsSL https://api.github.com/repos/kagamirror123/awsp/releas
 curl -fL -o /tmp/awsp "https://github.com/kagamirror123/awsp/releases/download/v${AWSP_VERSION}/awsp_${AWSP_VERSION}_darwin_arm64"
 install -m 0755 /tmp/awsp /usr/local/bin/awsp
 
-# 2. シェル連携(awsp <profile> の結果を親シェルに反映するために必要)
+# 2. シェル連携(awsp <profile> の結果を親シェルに反映するために必要。bash / fish は下の表)
 echo 'eval "$(awsp init zsh)"' >> ~/.zshrc && exec zsh
 
 # 3. 使う
@@ -87,6 +87,12 @@ total=3  current=dev
 | `awsp mcp` | MCP サーバー(stdio) |
 
 `current` / `list` / `status` / `login` / `whoami` は `--json` で機械可読になります。詳しくは **[docs/usage.md](docs/usage.md)**。
+
+| シェル | 連携の 1 行 |
+|---|---|
+| zsh | `echo 'eval "$(awsp init zsh)"' >> ~/.zshrc` |
+| bash | `echo 'eval "$(awsp init bash)"' >> ~/.bashrc` |
+| fish | `echo 'awsp init fish \| source' >> ~/.config/fish/config.fish` |
 
 ## 🤖 AI エージェントから使う
 

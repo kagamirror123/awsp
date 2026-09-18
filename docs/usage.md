@@ -53,7 +53,13 @@ $ awsp dev
 ✅ Set AWS_PROFILE=dev
 ```
 
-`awsp <profile>` の結果を親シェルに反映するには `eval "$(awsp init zsh)"` が必要です。関数が `awsp ... --shell` の出力を `eval` します。
+`awsp <profile>` の結果を親シェルに反映するにはシェル連携が必要です。関数が `awsp ... --shell` の出力を `eval` します。
+
+| シェル | 設定ファイルに書く 1 行 |
+|---|---|
+| zsh | `eval "$(awsp init zsh)"` |
+| bash | `eval "$(awsp init bash)"` |
+| fish | `awsp init fish \| source` |
 
 ## 認証状態とログイン
 
@@ -137,7 +143,7 @@ $ awsp status --json
 |---|---|
 | `--login-only` | profile は変更せずログイン状態だけ確認 |
 | `--no-login` | caller identity の確認とログインを省略して反映処理のみ |
-| `--shell` | `awsp init zsh` が内部で使う export / unset 出力モード |
+| `--shell[=posix\|fish]` | `awsp init` の関数が内部で使う出力モード。値なしは posix(bash / zsh の export / unset)、fish は `set -gx` / `set -e` |
 | `-v, --verbose` | 詳細ログ |
 
 ## 端末と出力
