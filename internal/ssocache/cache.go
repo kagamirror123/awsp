@@ -51,6 +51,9 @@ type Evaluation struct {
 	ExpiresAt time.Time
 	// Remaining は ExpiresAt までの残り時間 期限切れ後は負値になる
 	Remaining time.Duration
+	// AutoRefresh は SDK / CLI が refreshToken でアクセストークンを取り直せるか(D34)
+	// true なら ok の Remaining はアクセストークンの残りにすぎず ログインし直しまでの時間ではない
+	AutoRefresh bool
 }
 
 // DefaultCacheDir は sso トークンキャッシュの既定ディレクトリを返す
@@ -106,16 +109,16 @@ func Evaluate(meta TokenMeta, now time.Time, grace time.Duration) Evaluation {
 		return Evaluation{State: StateUnknown}
 	}
 
-	remaining := meta.ExpiresAt.Sub(now)
-	if remaining > 0 {
-		return Evaluation{State: StateOK, ExpiresAt: meta.ExpiresAt, Remaining: remaining}
+	eval := Evaluation{ExpiresAt: meta.ExpiresAt, Remaining: meta.ExpiresAt.Sub(now), AutoRefresh: meta.HasRefreshToken}
+	switch {
+	case eval.Remaining > 0:
+		eval.State = StateOK
+	case meta.HasRefreshToken && now.Before(meta.ExpiresAt.Add(grace)):
+		eval.State = StateWarning
+	default:
+		eval.State = StateError
 	}
-
-	if meta.HasRefreshToken && now.Before(meta.ExpiresAt.Add(grace)) {
-		return Evaluation{State: StateWarning, ExpiresAt: meta.ExpiresAt, Remaining: remaining}
-	}
-
-	return Evaluation{State: StateError, ExpiresAt: meta.ExpiresAt, Remaining: remaining}
+	return eval
 }
 
 // RoleCredentialKey は ~/.aws/cli/cache のキー算出に使う入力

@@ -1,6 +1,6 @@
 # awsp 設計ドキュメント: AI ネイティブ化
 
-状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正と D24〜D31 を反映。設計の正典はこのファイル。
+状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正と D24〜D34 を反映。設計の正典はこのファイル。
 確定した項目は「決定事項」へ、退けた案は「却下した案」へ移し、理由を必ず残す。
 
 ## 1. 目的
@@ -41,7 +41,7 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | D6 | 出力契約 | JSON に schemaVersion。MCP ツールは outputSchema 付き | モデルが読む出力なので契約を明示し、変更を検知可能にする |
 | D7 | preflight | CLI のみ。1 行・装飾なし・exit code。ローカル判定 | SessionStart フック用。authdoc の状態モデルを移植 |
 | D8 | 描画 | Lip Gloss v2 に一本化。ヘルプとエラーは Fang。TUI は Bubble Tea v2 | pterm / go-pretty / lipgloss の 3 本立てを解消 |
-| D9 | TUI | 一覧行に認証状態と残り時間、現在値の印を載せる。詳細には認証情報取得時刻を表示する | 選ぶ時点で「使えるか」が見える |
+| D9 | TUI | 一覧行に認証状態と現在値の印を載せる。詳細には認証情報取得時刻を表示する。**2026-09-25 改訂**: 一覧行の残り時間は外した(D34) | 選ぶ時点で「使えるか」が見える。残り時間はアクセストークンの残りで、同じ sso-session の profile には同じ値が並ぶだけだった |
 | D10 | 非 TTY | stdin が端末でなければ TUI を出さず、次のコマンドを含むエラーで終わる | エージェントが誤って対話 UI を起こしても固まらない |
 | D11 | 切り替え | AWS_PROFILE の切り替えは人間用のシェル関数(D24)に残す。エージェントは list_profiles で名前を知り `--profile` を付けて叩く | MCP からエージェントの Bash の環境変数は変えられない |
 | D12 | SSO ログインの実装 | aws CLI の exec をやめ、SDK(ssooidc)で **Authorization Code + PKCE**(localhost へのリダイレクト)を Go で持つ。CLI 互換の `~/.aws/sso/cache` を書く。人間の `awsp login` も同じ実装。device code は `--use-device-code` の opt-in として残す | URL とコードが構造化で取れ、D4 が素直に実装できる。更新前は保守負荷を理由に CLI へ委譲していた(`internal/awscli/client.go`)が、当時は自前実装の便益がゼロだった。要件が変わったので覆す。条件: 「awsp が書いたトークンで `aws sts get-caller-identity` が通る」検証を手順に残す。**2026-09-16 改訂**: 当初は device code を採用したが、作者の Identity Center では公式 CLI の `--use-device-code` でも承認画面で「サインイン認証情報を確認できませんでした」と弾かれ、device code の grant 自体が通らないと判明。CLI 既定と同じ PKCE に切り替えた。OIDC クライアント登録は追加のキャッシュ管理を避けるため毎回新規に行う。登録 URI はポートなしであり、再利用は技術的には可能 |
@@ -62,8 +62,11 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | D27 | SBOM | goreleaser の `sboms` で syft を使い、アーカイブごとに SPDX JSON を Release へ添付 | 公開バイナリの依存の証跡。設定 2 行と syft のインストール 1 ステップで済む。成果物の署名(cosign keyless)は未着手。Rekor の公開ログに記録が残る運用なので需要が見えてから(2026-09-18) |
 | D28 | Homebrew tap | goreleaser の `homebrew_casks` で `kagamirror123/homebrew-tap` に cask を自動生成・push。`brew install --cask kagamirror123/tap/awsp`。未署名バイナリなので post-install で quarantine 属性を外す。Linux は Releases の curl のまま | goreleaser は v2.10 以降 `brews`(formula)を非推奨にし、バイナリ配布は cask を推奨している。cask は macOS 専用だが awsp の利用者は macOS が主で、Linux に Homebrew を入れている人はまれ。tap への push は GITHUB_TOKEN では届かないので fine-grained PAT を Secrets に置く(2026-09-18) |
 | D29 | profile 名の補完 | `awsp` / `login` / `whoami` の位置引数に Cobra の ValidArgsFunction で config の profile 名を返す。補完スクリプトはリリース時に生成して tar.gz と cask に同梱する(Homebrew が zsh の `awsp.zsh` を `_awsp` に改名する)。シェル関数は `__complete` / `__completeNoDesc` を素通しする | 十数個の profile 名を正確に打つのは負担で、TUI を開くより `awsp de<Tab>` のほうが速い。読むのは config だけでネットワークは使わない。`(unset)` は括弧の補完エスケープが読みにくいので候補に入れない。素通しを忘れると関数が補完呼び出しを切り替えと誤解して `--shell` を付ける(2026-09-19) |
-| D30 | currentProfile | `list --json` と MCP の `list_profiles` に `currentProfile`(プロセスの `AWS_PROFILE`)を載せる。MCP サーバーは起動元シェルの環境を引き継ぐので、それが人間の選択になる。ツール説明で「指示が無ければこれを使う」と誘導する。schemaVersion は 1 のまま(任意フィールドの追加) | エージェントは D11 で切り替えを持たず、どの profile で叩くべきかを推測か質問で決めていた。人間の選択を 1 フィールドで伝えれば往復が減る。人間用と AI 用で config を分けている場合はこの config に無い名前になり得るので、その旨を説明に書く(2026-09-19) |
+| D30 | currentProfile | `list --json` と MCP の `list_profiles` に `currentProfile`(プロセスの `AWS_PROFILE`)を載せる。MCP サーバーは起動元シェルの環境を引き継ぐので、それが人間の選択になる。ツール説明で「指示が無ければこれを使う」と誘導する。schemaVersion は 1 のまま(任意フィールドの追加) | エージェントは D11 で切り替えを持たず、どの profile で叩くべきかを推測か質問で決めていた。人間の選択を 1 フィールドで伝えれば往復が減る。人間用と AI 用で config を分けている場合はこの config に無い名前になり得るので、その旨を説明に書く(2026-09-19)。**制約(2026-09-25)**: 効くのはエージェントをそのシェルから起動したときだけ。デスクトップアプリなどシェル以外から起動したエージェントは `AWS_PROFILE` を持たないので出ない。作者の 9/16 以降のセッションは全部これで一度も出ていないが、エージェントは依頼内容や貼られたプロンプトから profile を選べていたので足さない |
 | D31 | コンソールを開く | `awsp console [profile] [url]`。IAM Identity Center のアクセスポータルの deep link(`<start_url>/#/console?account_id=…&role_name=…[&destination=…]`)を組んでブラウザで開く。profile 省略時は AWS_PROFILE。destination は https の AWS コンソール(`*.aws.amazon.com` / `*.amazonaws.com` 系)に限る。`--no-browser` と `--json` あり。MCP には出さない | awsee を中止したとき「GUI に残る価値はコンソール deep link だけ」と判断した、その 1 点を CLI に持つ。ターミナルで使っている profile のままコンソールへ移れる。Slack やチケットのコンソール URL はサインイン中のアカウントに飛ぶので、destination で正しいアカウントに向ける。URL を組んで開くだけでトークンに触れず、ネットワークも使わない。エージェントにブラウザを開かせる用途は無いので MCP ツールにしない。SSO を使わない profile は federation(GetSigninToken に認証情報を送る)が要るので対象外(2026-09-19) |
+| D32 | MCP サーバーの instructions | initialize で短い利用方針を返す。内容は「profile ごとに別の account / role に届く。今と別のアカウントが要るときは list_profiles で profile を探し、`--profile` を付けて aws CLI で読む。届かないと結論したり、人に読み取りを頼んだりしない」と「失効していれば login」の 2 点だけ | 2026-09-18 に、1 アカウント固定の別 MCP サーバー(指示文で aws CLI を使わないよう求める)を先に使ったエージェントが「このアカウントにしか繋がっていない」と人に読み取りを頼み、指摘されるまで list_profiles を呼ばなかった。Claude Code はツールを遅延読み込みにするので、ツールの説明は検索するまで読まれない。instructions はツールが遅延でも毎セッション読まれる。代償は毎セッション約 70 トークンで、D21 と同じ種類のコストになる。固定の短文で、人の手を止めた失敗を防げるので受け入れる(2026-09-25) |
+| D33 | カードの幅 | 切り替え後・`current`・`whoami`・`console`・`login` のカードは、端末幅に収まるときだけ枠を付け、はみ出すときは枠を外して字下げだけで出す。切り替え後と `login` のカードは ARN を載せず、ARN から取り出したロール名(IAM Identity Center のロールは許可セット名)と UserId を載せる。ARN は `current` / `whoami` / `--json` で見る | 枠の幅は最長行で決まり、ARN やコンソール URL で 133〜137 桁になっていた。それより狭い端末では全行が折り返して枠が割れる。枠の中で折り返すと ARN や URL に罫線が混ざってコピーもクリックもできなくなるので、はみ出すときは枠を外して端末の折り返しに任せる。一番よく見る切り替え後のカードは ARN を外すと 60 桁ほどになり、たいていの端末で枠が残る(2026-09-25) |
+| D34 | 残り時間の出し方 | 自動更新が効く(名前付き sso-session で refreshToken がある)とき、ok の表示に残り時間を出さない。`status` / `auth_status` / `preflight` の要約は「有効(自動更新あり)」、`status` 表の Remaining は「自動更新」。TUI の一覧行と `list` 表の残り時間は外す。自動更新が効かない legacy 形式などは従来どおり残り時間を出す。JSON は `expiresAt` / `remainingSeconds` を残し、任意フィールド `autoRefresh` を足す(schemaVersion は 1 のまま) | 残り時間はアクセストークン(1 時間)の残りで、SDK / CLI が refreshToken で取り直すので、ok ならいつ見ても 1 時間弱になる。「あと何分でログインし直し」と読めてしまう。2026-09-18 に「残り 35m」と出たあと 8 時間使えた。本当の期限(セッション終端)はキャッシュに無い(Q12)。TUI では全 profile の右に同じ値が並んで邪魔だった(2026-09-25) |
 
 ## 5. 却下した案
 
@@ -75,6 +78,7 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | login が URL とコードを返して即終了し、auth_status で確認させる | 往復が増える。ブロック方式(D3)を採用 | 本セッション |
 | `awsp derive`(sso_role_name だけ置換した読み取り専用 config を生成) | 一度実装したが撤回。中身は sed 1 行と同じで、使う頻度は初回と profile 追加時だけ。用途が「config を分けて AI に読み取り専用を見せる」1 方式に固定され、公開ツールの芯(ローカル状態を読む・ログインする・エージェントに見せる)から外れる唯一の書き込み系コマンドだった。config-agent のズレは「作る」より「知る」問題で、生成コマンドは解になっていない。作り方は README に sed の 1 行として残す | 本セッション(2026-09-16) |
 | バイナリと関数の名前を分ける(`awsp` はバイナリのまま、切り替えだけ `ap` などの関数にする。zoxide の `z`、Granted の `assume` と同じ形) | `which awsp` がパスではなく関数定義を返す違和感は消えるが、`awsp list` と `ap dev` の 2 つの名前を覚えることになる。子プロセスは親シェルの環境変数を変えられないので、切り替えを関数にすること自体は避けられず、名前を 1 つにまとめる今の形の代償は `which` の見た目だけ。動作上の差は無い | 本セッション(2026-09-18) |
+| 打ち間違いに候補を出す(`awsp lit` に「もしかして: awsp list」) | 作者のシェル履歴に `lit` / `sattus` / `consple` / `agoop-edv` / `agoop0dev` があり、どれも「指定プロファイルが見つかりません」だけで終わっていたが、作者判断で見送り | 利用履歴の振り返り(2026-09-25) |
 
 ## 6. 状態モデル
 
@@ -85,7 +89,7 @@ legacy 形式(`sso_start_url` 直書き)は `sha1(start URL)` がキー。
 
 | 状態 | 条件 | 表示 |
 |---|---|---|
-| ok | expiresAt が未来 | 有効(残り時間) |
+| ok | expiresAt が未来 | 有効(自動更新あり)。自動更新が効かない legacy などは有効(残り時間)(D34) |
 | warning | 名前付き sso-session で期限切れだが refreshToken あり、猶予内 | 使用時に自動更新を試行。認証エラーなら awsp login を案内 |
 | error | legacy の期限切れ、refreshToken なし、猶予超過、またはキャッシュ読み取りエラー | 失効。`awsp login` を案内 |
 | unknown | キャッシュファイルなし | 未ログイン |
@@ -146,7 +150,7 @@ CLI は成功時だけ JSON を stdout に出し、URL・承認案内は stderr 
 
 AWS_CONFIG_FILE、JSON、非 TTY、status / preflight、PKCE login、MCP、描画の統一は実装済み。
 派生 config 生成は撤回済み(D15)。2026-09-18 のレビューで認証復旧、破損キャッシュ、MCP の並行処理と期限、JSON 出力、TUI の端末幅への対応を修正した。
-同日に D24〜D28 を実装。2026-09-19 に D29〜D31 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
+同日に D24〜D28 を実装。2026-09-19 に D29〜D31、2026-09-25 に D32〜D34 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
 
 D12 の実 AWS での確認は 2026-09-16 に実施済み: `awsp login <profile>` が書いたキャッシュで `aws sts get-caller-identity --profile <profile>` が成功し、トークンファイルのキーは CLI と同じ 8 個、権限 0600、refreshToken あり。レビュー修正の自動テストでは実 AWS を使わず、OIDC/STS のフェイク、隔離したキャッシュ、localhost のコールバックを使う。
 

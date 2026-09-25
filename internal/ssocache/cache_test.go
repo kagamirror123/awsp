@@ -165,6 +165,18 @@ func TestEvaluate(t *testing.T) {
 		}
 	})
 
+	t.Run("AutoRefresh は refreshToken の有無をそのまま表す(D34)", func(t *testing.T) {
+		t.Parallel()
+		withRefresh := Evaluate(TokenMeta{Exists: true, ExpiresAt: now.Add(time.Hour), HasRefreshToken: true}, now, grace)
+		if withRefresh.State != StateOK || !withRefresh.AutoRefresh {
+			t.Fatalf("refreshToken ありの ok が想定外: %+v", withRefresh)
+		}
+		withoutRefresh := Evaluate(TokenMeta{Exists: true, ExpiresAt: now.Add(time.Hour)}, now, grace)
+		if withoutRefresh.State != StateOK || withoutRefresh.AutoRefresh {
+			t.Fatalf("refreshToken なしの ok が想定外: %+v", withoutRefresh)
+		}
+	})
+
 	t.Run("warning: 期限切れだが refreshToken ありで猶予内", func(t *testing.T) {
 		t.Parallel()
 		meta := TokenMeta{Exists: true, ExpiresAt: now.Add(-1 * time.Hour), HasRefreshToken: true}

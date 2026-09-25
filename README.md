@@ -32,7 +32,7 @@ https://github.com/user-attachments/assets/c5d0397e-0774-4040-b3ea-40bba1de78f0
 ## ✨ Features
 
 - **選んで切り替える。** 一覧から選ぶか `awsp <profile>`。切り替えた瞬間に caller identity を確認して表示
-- **認証状態がひと目で分かる。** 各 profile に 🟢🟡🔴、残り時間、認証情報取得時刻。判定はローカルだけで、ネットワークを使わない
+- **認証状態がひと目で分かる。** 各 profile に 🟢🟡🔴 と認証情報取得時刻。判定はローカルだけで、ネットワークを使わない
 - **ログインはブラウザで 1 クリック。** Authorization Code + PKCE を Go で内製。aws CLI は不要で、キャッシュは CLI と完全互換
 - **コンソールも 1 コマンド。** `awsp console` で、いまの profile の account / role のままマネジメントコンソールが開く。Slack で渡された URL も正しいアカウントで開ける
 - **AI エージェントの道具になる。** `awsp mcp` で `auth_status` / `list_profiles` / `whoami` / `login`。`login` は人の承認を待ってから返る
@@ -86,11 +86,11 @@ total=3  current=dev
 |---|---|
 | `awsp` | 対話 UI。文字で絞り込み、↑↓ で移動、Enter で決定 |
 | `awsp <profile>` | 直接切り替え。失効していれば自動でログイン |
-| `awsp status` | sso-session ごとの有効・失効・残り時間 |
+| `awsp status` | sso-session ごとの有効・失効。自動更新が効かないときは残り時間も |
 | `awsp login [profile]` | ブラウザで承認するだけ。有効なら何もしない |
 | `awsp current` / `awsp whoami [profile]` | caller identity。`whoami` は自動ログインしない |
 | `awsp console [profile] [url]` | その account / role でマネジメントコンソールをブラウザで開く。URL を渡せばそのページを正しいアカウントで開く |
-| `awsp list` | 一覧。認証状態と残り時間つき |
+| `awsp list` | 一覧。認証状態つき |
 | `awsp preflight` | 1 行と exit code。フックやスクリプト向け |
 | `awsp mcp` | MCP サーバー(stdio) |
 

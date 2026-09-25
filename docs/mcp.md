@@ -22,7 +22,7 @@ args = ["mcp"]
 
 | ツール | 何をするか | ネットワーク |
 |---|---|---|
-| `auth_status` | SSO セッションの有効・失効。作業の最初に呼ぶ | 使わない |
+| `auth_status` | SSO セッションの有効・失効。作業の最初に呼ぶ。`autoRefresh: true` なら `remainingSeconds` はアクセストークンの残りで、自動で延びる | 使わない |
 | `list_profiles` | profile 一覧と account / role / 認証状態。`currentProfile` に人間がシェルで選んでいる profile(サーバーが引き継いだ `AWS_PROFILE`)を返す | 使わない |
 | `whoami` | 指定 profile の caller identity。自動ログインしない | STS |
 | `login` | ログインを起こし、人がブラウザで承認するまで待ってから返る | SSO OIDC、profile 指定時は STS |
@@ -43,6 +43,7 @@ args = ["mcp"]
 
 MCP を登録すると、エージェントはツールの説明を読んで次のように振る舞います。
 
+- 今と別のアカウントが要るとき、`list_profiles` で profile を探して `--profile` で読む。サーバーの instructions で伝えているので、ツールが遅延読み込みで説明がまだ読まれていなくても効く。instructions は 3 文で、毎セッションのコンテキストに載る
 - `aws` コマンドが認証エラーで失敗したとき、`login` を呼んで復帰する。ここは説明文で誘導しているのでほぼ自動で起きる
 - 作業前に `auth_status` で先回りするかは、エージェントの判断に任される。確実にしたいならプロジェクトの `CLAUDE.md` や `AGENTS.md` に 1 行書く
 
@@ -54,6 +55,7 @@ profile の切り替えは人間のシェル関数が行います。MCP から�
 エージェントは `list_profiles` で得た名前を `aws ... --profile <name>` に渡して使います。
 どの profile を使うか指示が無いときは `currentProfile`(人間がシェルで選んでいるもの)を使うようツールの説明で誘導しています。
 人間用と AI 用で config を分けている場合、`currentProfile` がその config に無い名前のこともあります。
+`currentProfile` が出るのは、エージェントを `awsp <profile>` したシェルから起動したときだけです。デスクトップアプリなどシェル以外から起動すると `AWS_PROFILE` を引き継がないので出ません。
 
 ## 人間と AI で config を分ける
 

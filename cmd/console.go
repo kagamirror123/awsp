@@ -72,7 +72,7 @@ func newConsoleCmd() *cobra.Command {
 
 			out := ui.NewWriter(cmd.OutOrStdout())
 			_, _ = fmt.Fprintln(out)
-			_, _ = fmt.Fprintln(out, renderConsoleCard(report, source))
+			_, _ = fmt.Fprintln(out, renderConsoleCard(report, source, ui.TerminalWidth(out)))
 			return nil
 		},
 	}
@@ -110,7 +110,8 @@ func findSSOProfile(name string, profiles []awsconfig.Profile, sessions []awscon
 	)
 }
 
-func renderConsoleCard(report awsp.ConsoleReport, source string) string {
+// renderConsoleCard は console のカードを描画する URL が長いので 収まらない端末では枠を外す(D33)
+func renderConsoleCard(report awsp.ConsoleReport, source string, maxWidth int) string {
 	lines := []string{
 		fmt.Sprintf("🔐 Profile : %s", report.Profile),
 		fmt.Sprintf("📍 Source  : %s", source),
@@ -121,5 +122,5 @@ func renderConsoleCard(report awsp.ConsoleReport, source string) string {
 		lines = append(lines, fmt.Sprintf("🎯 Dest    : %s", report.Destination))
 	}
 	lines = append(lines, fmt.Sprintf("🔗 URL     : %s", report.URL))
-	return ui.RenderCard("🖥️ AWS Console", lines)
+	return ui.RenderCard("🖥️ AWS Console", lines, maxWidth)
 }

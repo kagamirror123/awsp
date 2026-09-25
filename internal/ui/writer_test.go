@@ -17,7 +17,7 @@ func styledSample() string {
 		Muted("muted"),
 		Badge(BadgeOK, "ok"),
 		NewTable("a", "b").AddRow("1", "2").Render(),
-	})
+	}, 0)
 }
 
 func TestNewWriter_NonTTYStripsANSI(t *testing.T) {

@@ -2,10 +2,10 @@
 ↑↓ 移動  Enter 決定  / 検索  q 終了
 ╭──────────────────────────────────────────────╮╭──────────────────────────────────────────────────────────────────────╮
 │  🧭 Profiles                                 ││ 📋 Profile detail                                                    │
-│    🧹 (unset)  -                             ││ 🔐 name         dev                                                  │
-│ │ ▶ 🟢 dev  52m                              ││ 🌏 region       us-west-2                                            │
-│    🔴 prod  -11h                             ││ 🧾 output       -                                                    │
-│    🪪 legacy  -                              ││ 🧩 session      corp                                                 │
+│    🧹 (unset)                                ││ 🔐 name         dev                                                  │
+│ │ ▶ 🟢 dev                                   ││ 🌏 region       us-west-2                                            │
+│    🔴 prod                                   ││ 🧾 output       -                                                    │
+│    🪪 legacy                                 ││ 🧩 session      corp                                                 │
 │                                              ││ 🏢 account      111122223333                                         │
 │                                              ││ 🛡  role         AdministratorAccess                                  │
 │                                              ││ 🎭 role arn     -                                                    │

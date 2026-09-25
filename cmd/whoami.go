@@ -43,7 +43,7 @@ func newWhoamiCmd() *cobra.Command {
 				Account: identity.Account,
 				UserID:  identity.UserID,
 				ARN:     identity.ARN,
-			}))
+			}, ui.TerminalWidth(out)))
 			return nil
 		},
 	}

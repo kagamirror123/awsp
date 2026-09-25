@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/kagamirror123/awsp/internal/awsp"
 	"github.com/kagamirror123/awsp/internal/ssocache"
@@ -58,7 +57,7 @@ func newListCmd() *cobra.Command {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(list)
 			}
 
-			// 人間向け表示は D9 の状態/残り時間/認証情報取得を足すため
+			// 人間向け表示は D9 の状態/認証情報取得を足すため
 			// profileStoreAdapter で awsp.BuildProfileList 相当の情報を埋めた Profile を使う
 			profiles, err := (profileStoreAdapter{store: profileStore}).Profiles(cmd.Context())
 			if err != nil {
@@ -77,7 +76,7 @@ func newListCmd() *cobra.Command {
 }
 
 // renderProfileList は `awsp list` の人間向け表を描画する
-// D9 で足した State / Expires / Fetched も列に含める
+// D9 で足した State / Fetched も列に含める 残り時間の列は置かない(D34)
 // Current / # / Auth の列は廃止し(D22) 現在の profile は名前の前に "▶ " を付けて強調する
 func renderProfileList(profiles []awsp.Profile, stdout io.Writer) string {
 	if len(profiles) == 0 {
@@ -85,12 +84,11 @@ func renderProfileList(profiles []awsp.Profile, stdout io.Writer) string {
 	}
 
 	current := os.Getenv("AWS_PROFILE")
-	now := time.Now()
 
-	table := ui.NewTable("Profile", "Region", "Account", "Role", "Source", "State", "Expires", "Fetched").
+	table := ui.NewTable("Profile", "Region", "Account", "Role", "Source", "State", "Fetched").
 		Truncate("Role", 24).
 		Truncate("Account", 14).
-		DropWhenNarrow("Fetched", "Source", "Region", "Expires").
+		DropWhenNarrow("Fetched", "Source", "Region").
 		MaxWidth(ui.TerminalWidth(stdout))
 
 	for _, profile := range profiles {
@@ -109,7 +107,6 @@ func renderProfileList(profiles []awsp.Profile, stdout io.Writer) string {
 			ui.DashIfEmpty(profile.SSORoleName),
 			ui.DashIfEmpty(profile.SourceProfile),
 			profileStateBadge(profile),
-			profileExpiresLabel(profile, now),
 			profileLastUsedLabel(profile),
 		)
 	}
@@ -150,14 +147,6 @@ func profileStateBadge(profile awsp.Profile) string {
 	default:
 		return ui.Badge(ui.BadgeUnknown, string(ssocache.StateUnknown))
 	}
-}
-
-// profileExpiresLabel は sso-session の残り時間を返す(D9 と同じ書式 期限切れは負)
-func profileExpiresLabel(profile awsp.Profile, now time.Time) string {
-	if profile.SessionExpiresAt == nil {
-		return ui.Muted("-")
-	}
-	return awsp.FormatRemaining(profile.SessionExpiresAt.Sub(now))
 }
 
 // profileLastUsedLabel は ~/.aws/cli/cache の認証情報キャッシュの取得・更新時刻を返す

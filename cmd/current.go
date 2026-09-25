@@ -64,7 +64,7 @@ func newCurrentCmd() *cobra.Command {
 
 			out := ui.NewWriter(cmd.OutOrStdout())
 			_, _ = fmt.Fprintln(out)
-			_, _ = fmt.Fprintln(out, renderCurrentCard(profile, source, identity))
+			_, _ = fmt.Fprintln(out, renderCurrentCard(profile, source, identity, ui.TerminalWidth(out)))
 			return nil
 		},
 	}
@@ -137,12 +137,13 @@ func loginForProfile(ctx context.Context, profile string, client awsp.AWSIdentit
 	}, nil
 }
 
-func renderCurrentCard(profile string, source string, identity awscli.Identity) string {
+// renderCurrentCard は current / whoami のカードを描画する ARN も載せ 収まらない端末では枠を外す(D33)
+func renderCurrentCard(profile string, source string, identity awscli.Identity, maxWidth int) string {
 	return ui.RenderCard("🪪 Current AWS Identity", []string{
 		fmt.Sprintf("🔐 Profile : %s", profile),
 		fmt.Sprintf("📍 Source  : %s", source),
 		fmt.Sprintf("🧾 Account : %s", identity.Account),
 		fmt.Sprintf("👤 UserId  : %s", identity.UserID),
 		fmt.Sprintf("🌍 ARN     : %s", identity.ARN),
-	})
+	}, maxWidth)
 }

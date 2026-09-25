@@ -17,7 +17,7 @@ func realisticModel(t *testing.T, width, height int) tea.Model {
 	t.Helper()
 	expires := goldenNow.Add(time.Hour)
 	profiles := []awsp.Profile{{Name: "production-readonly-ap-northeast-1", Region: "ap-northeast-1", SSOSession: "corporate", SSOAccountID: "123456789012", SSORoleName: "ReadOnlyAccess", SessionState: ssocache.StateOK, SessionExpiresAt: &expires, LastUsedAt: &goldenNow, CredentialExpiresAt: &expires, RoleARN: "arn:aws:iam::123456789012:role/production-readonly", Diagnostics: []string{strings.Repeat("キャッシュ診断 ", 15)}}}
-	model := newSelectModel(buildItems(profiles, goldenNow))
+	model := newSelectModel(buildItems(profiles))
 	model.location = time.UTC
 	model.setCurrentProfile(profiles[0].Name)
 	return apply(t, model, tea.WindowSizeMsg{Width: width, Height: height})
@@ -45,7 +45,7 @@ func TestLayoutFitsTerminalAndDetailsCanScroll(t *testing.T) {
 func TestSearchAcceptsQAndG(t *testing.T) {
 	for _, query := range []string{"qa", "gcp", "GCP"} {
 		t.Run(query, func(t *testing.T) {
-			var model tea.Model = newSelectModel(buildItems([]awsp.Profile{{Name: query}, {Name: "prod"}}, goldenNow))
+			var model tea.Model = newSelectModel(buildItems([]awsp.Profile{{Name: query}, {Name: "prod"}}))
 			if query == "qa" {
 				model = apply(t, model, tea.KeyPressMsg{Text: "/", Code: '/'})
 			}

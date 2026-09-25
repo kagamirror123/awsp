@@ -21,6 +21,54 @@ func writeTokenFixture(t *testing.T, cacheDir string, key string, content string
 	}
 }
 
+// 自動更新が効くセッションは ok でも残り時間を出さない(D34)
+func TestBuildStatusReport_OKWithRefreshTokenHidesRemaining(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+
+	writeTokenFixture(t, cacheDir, "corp-sso", `{"expiresAt": "2026-09-16T12:52:00Z", "refreshToken": "dummy"}`)
+	writeTokenFixture(t, cacheDir, "https://legacy.awsapps.com/start", `{"expiresAt": "2026-09-16T12:52:00Z", "refreshToken": "dummy"}`)
+
+	profiles := []awsconfig.Profile{
+		{Name: "dev", SSOSession: "corp-sso", SSOAccountID: "123456789012", SSORoleName: "AdministratorAccess"},
+		{Name: "legacy-dev", SSOStartURL: "https://legacy.awsapps.com/start", SSORegion: "ap-northeast-1"},
+	}
+	sessions := []awsconfig.SSOSession{
+		{Name: "corp-sso", StartURL: "https://example.awsapps.com/start", Region: "us-west-2"},
+	}
+
+	report, err := BuildStatusReport(profiles, sessions, StatusOptions{CacheDir: cacheDir, Grace: 8 * time.Hour, Now: now})
+	if err != nil {
+		t.Fatalf("BuildStatusReport が失敗: %v", err)
+	}
+
+	byName := map[string]SessionStatus{}
+	for _, s := range report.Sessions {
+		byName[s.Name] = s
+	}
+
+	named := byName["corp-sso"]
+	if !named.AutoRefresh || named.Summary != "有効(自動更新あり)" {
+		t.Fatalf("名前付き sso-session が想定外: autoRefresh=%v summary=%q", named.AutoRefresh, named.Summary)
+	}
+	if named.RemainingSeconds == nil || *named.RemainingSeconds != 52*60 {
+		t.Fatalf("JSON の RemainingSeconds は残す: %v", named.RemainingSeconds)
+	}
+
+	// legacy 形式は SDK / CLI が自動更新しないので 残り時間が本当の期限として残る
+	legacy := byName[""]
+	if legacy.AutoRefresh || legacy.Summary != "有効(残り 52m)" {
+		t.Fatalf("legacy が想定外: autoRefresh=%v summary=%q", legacy.AutoRefresh, legacy.Summary)
+	}
+
+	line, _ := PreflightLine(StatusReport{Overall: ssocache.StateOK, Sessions: []SessionStatus{named}})
+	if want := "awsp preflight: AWS SSO 有効(corp-sso 自動更新あり)"; line != want {
+		t.Fatalf("PreflightLine が想定外\nwant=%s\ngot=%s", want, line)
+	}
+}
+
 func TestBuildStatusReport_SingleSessionOK(t *testing.T) {
 	t.Parallel()
 

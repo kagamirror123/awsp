@@ -44,6 +44,9 @@ type SessionStatus struct {
 	// RemainingSeconds は ExpiresAt までの残り秒数
 	// 期限切れ後は負値 未ログイン(unknown)時は nil
 	RemainingSeconds *int64 `json:"remainingSeconds,omitempty"`
+	// AutoRefresh は SDK / CLI が refreshToken でアクセストークンを自動更新できるか(D34)
+	// true のとき ExpiresAt と RemainingSeconds はアクセストークンの期限で ログインし直しまでの時間ではない
+	AutoRefresh bool `json:"autoRefresh,omitempty"`
 	// Summary は人が読むための状態要約 次に打つコマンドを含む
 	Summary string `json:"summary"`
 	// Profiles はこの sso-session を使う profile 名一覧
@@ -117,7 +120,12 @@ func PreflightLine(report StatusReport) (string, int) {
 
 	switch report.Overall {
 	case ssocache.StateOK:
-		remaining := safeDuration(group[0].RemainingSeconds)
+		// 自動更新が効くセッションの残り時間は期限にならないので 効かないセッションがあるときだけ残りを出す(D34)
+		fixed := withoutAutoRefresh(group)
+		if len(fixed) == 0 {
+			return fmt.Sprintf("awsp preflight: AWS SSO 有効(%s 自動更新あり)", names), exitCode
+		}
+		remaining := safeDuration(fixed[0].RemainingSeconds)
 		return fmt.Sprintf("awsp preflight: AWS SSO 有効(%s 残り %s)", names, formatDuration(remaining)), exitCode
 
 	case ssocache.StateWarning:
@@ -226,6 +234,7 @@ func buildSessionStatus(cacheDir string, group sessionGroup, now time.Time, grac
 		status.ExpiresAt = &expiresAt
 		remainingSeconds := int64(eval.Remaining.Seconds())
 		status.RemainingSeconds = &remainingSeconds
+		status.AutoRefresh = eval.AutoRefresh
 	}
 
 	return status
@@ -236,6 +245,10 @@ func summarizeSession(session awsconfig.SSOSession, eval ssocache.Evaluation) st
 
 	switch eval.State {
 	case ssocache.StateOK:
+		// 自動更新が効くなら残り時間はアクセストークンの残りにすぎないので出さない(D34)
+		if eval.AutoRefresh {
+			return "有効(自動更新あり)"
+		}
 		return fmt.Sprintf("有効(残り %s)", formatDuration(eval.Remaining))
 	case ssocache.StateWarning:
 		return fmt.Sprintf("失効(%s 前)。使用時に自動更新を試みます。認証エラーなら '%s' を実行してください", formatDuration(-eval.Remaining), hint)
@@ -274,6 +287,17 @@ func sessionsWithState(sessions []SessionStatus, state ssocache.EvaluationState)
 	result := make([]SessionStatus, 0, len(sessions))
 	for _, s := range sessions {
 		if s.State == state {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+// withoutAutoRefresh は自動更新が効かない(残り時間が本当の期限になる)セッションだけを返す(D34)
+func withoutAutoRefresh(sessions []SessionStatus) []SessionStatus {
+	result := make([]SessionStatus, 0, len(sessions))
+	for _, s := range sessions {
+		if !s.AutoRefresh {
 			result = append(result, s)
 		}
 	}

@@ -51,7 +51,7 @@ func NewSelectorWithIO(input io.Reader, output io.Writer) *Selector {
 
 // Select は候補を表示して 1 つ選択する
 func (s *Selector) Select(ctx context.Context, profiles []awsp.Profile) (string, error) {
-	model := newSelectModel(buildItems(profiles, time.Now()))
+	model := newSelectModel(buildItems(profiles))
 	model.setCurrentProfile(os.Getenv("AWS_PROFILE"))
 	program := tea.NewProgram(
 		model,
@@ -81,18 +81,17 @@ func (s *Selector) Select(ctx context.Context, profiles []awsp.Profile) (string,
 	return finalModel.selected, nil
 }
 
-func buildItems(profiles []awsp.Profile, now time.Time) []list.Item {
+func buildItems(profiles []awsp.Profile) []list.Item {
 	items := make([]list.Item, 0, len(profiles)+1)
-	items = append(items, profileItem{profile: awsp.Profile{Name: UnsetOption}, now: now})
+	items = append(items, profileItem{profile: awsp.Profile{Name: UnsetOption}})
 	for _, profile := range profiles {
-		items = append(items, profileItem{profile: profile, now: now})
+		items = append(items, profileItem{profile: profile})
 	}
 	return items
 }
 
 type profileItem struct {
 	profile awsp.Profile
-	now     time.Time
 	current bool
 }
 
@@ -108,12 +107,13 @@ func (i profileItem) FilterValue() string {
 	}, " ")
 }
 
+// Title は一覧行を返す 状態マークと名前だけを載せ 残り時間は載せない(D9 D34)
 func (i profileItem) Title() string {
 	current := ""
 	if i.current {
 		current = "● "
 	}
-	return fmt.Sprintf("%s%s %s  %s", current, stateMarker(i.profile), i.profile.Name, remainingLabel(i.profile, i.now))
+	return fmt.Sprintf("%s%s %s", current, stateMarker(i.profile), i.profile.Name)
 }
 
 func (i profileItem) Description() string {
@@ -461,15 +461,6 @@ func stateMarker(p awsp.Profile) string {
 			return "⚪"
 		}
 	}
-}
-
-// remainingLabel は一覧行に載せる残り時間を返す(D9)
-// awsp.SessionStatus と同じ書式(52m / 11h / 3d) 期限切れは "-11h" のように負で表す
-func remainingLabel(p awsp.Profile, now time.Time) string {
-	if p.SessionExpiresAt == nil {
-		return "-"
-	}
-	return awsp.FormatRemaining(p.SessionExpiresAt.Sub(now))
 }
 
 func (m *selectModel) applyLayout(width int, height int) {
