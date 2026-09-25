@@ -246,7 +246,7 @@ func (r *Runner) ensureLoggedIn(ctx context.Context, profile string, shellMode b
 		}
 	}
 
-	_, _ = fmt.Fprintln(writer, renderIdentityCard(profile, identity))
+	_, _ = fmt.Fprintln(writer, renderIdentityCard(profile, identity, ui.TerminalWidth(writer)))
 	return nil
 }
 
@@ -335,11 +335,16 @@ func containsProfileName(profiles []Profile, profile string) bool {
 	return slices.Contains(names, profile)
 }
 
-func renderIdentityCard(profile string, identity awscli.Identity) string {
-	return ui.RenderCard("🪪 AWS Caller Identity", []string{
+// renderIdentityCard は切り替え後に出す caller identity のカードを描画する
+// ARN は載せず ロール名だけを取り出して 狭い端末でも枠に収まる幅にする ARN は current / whoami / --json で見る(D33)
+func renderIdentityCard(profile string, identity awscli.Identity, maxWidth int) string {
+	lines := []string{
 		fmt.Sprintf("🔐 Profile : %s", profile),
 		fmt.Sprintf("🧾 Account : %s", identity.Account),
-		fmt.Sprintf("👤 UserId  : %s", identity.UserID),
-		fmt.Sprintf("🌍 ARN     : %s", identity.ARN),
-	})
+	}
+	if role := awscli.RoleName(identity.ARN); role != "" {
+		lines = append(lines, fmt.Sprintf("🎭 Role    : %s", role))
+	}
+	lines = append(lines, fmt.Sprintf("👤 UserId  : %s", identity.UserID))
+	return ui.RenderCard("🪪 AWS Caller Identity", lines, maxWidth)
 }

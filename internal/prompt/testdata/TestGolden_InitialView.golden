@@ -2,10 +2,10 @@
 ↑↓ 移動  Enter 決定  / 検索  q 終了
 ╭──────────────────────────────────────────────╮╭──────────────────────────────────────────────────────────────────────╮
 │  🧭 Profiles                                 ││ 🧹 Unset mode                                                        │
-│ │ ▶ 🧹 (unset)  -                            ││ 現在の環境変数を解除                                                 │
-│    🟢 dev  52m                               ││                                                                      │
-│    🔴 prod  -11h                             ││ unset AWS_PROFILE                                                    │
-│    🪪 legacy  -                              ││ unset AWS_ACCESS_KEY_ID                                              │
+│ │ ▶ 🧹 (unset)                               ││ 現在の環境変数を解除                                                 │
+│    🟢 dev                                    ││                                                                      │
+│    🔴 prod                                   ││ unset AWS_PROFILE                                                    │
+│    🪪 legacy                                 ││ unset AWS_ACCESS_KEY_ID                                              │
 │                                              ││ unset AWS_SECRET_ACCESS_KEY                                          │
 │                                              ││ unset AWS_SESSION_TOKEN                                              │
 │                                              ││                                                                      │

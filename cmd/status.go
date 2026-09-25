@@ -77,10 +77,11 @@ func loadStatusReport(ctx context.Context, grace time.Duration) (awsp.StatusRepo
 // renderStatusReport は `awsp status` の人間向け表を描画する
 // 表には Profiles の名前は並べず件数だけを載せ(D22) ok 以外のセッションがあれば
 // その Summary(次に打つコマンド入り)を表の下に 1 行ずつ足す
+// generatedAt は人が見ると実行時刻でしかなく 狭い端末で行を折り返させるだけなので JSON にだけ載せる
 func renderStatusReport(report awsp.StatusReport, stdout io.Writer) string {
 	lines := []string{
 		ui.Heading(fmt.Sprintf("🔐 AWS SSO Status (%s)", report.Overall)),
-		ui.Muted(fmt.Sprintf("configFile=%s generatedAt=%s", report.ConfigFile, report.GeneratedAt.Format(time.RFC3339))),
+		ui.Muted("configFile=" + report.ConfigFile),
 		"",
 	}
 
@@ -126,9 +127,13 @@ func sessionExpiresLabel(session awsp.SessionStatus) string {
 }
 
 // sessionRemainingLabel は awsp.FormatRemaining と同じ書式の残り時間を返す 期限切れは負(D22) unknown は "-"
+// 有効で自動更新が効くときは 残り時間がアクセストークンの残りにすぎないので "自動更新" と出す(D34)
 func sessionRemainingLabel(session awsp.SessionStatus) string {
 	if session.RemainingSeconds == nil {
 		return ui.Muted("-")
+	}
+	if session.State == ssocache.StateOK && session.AutoRefresh {
+		return "自動更新"
 	}
 	return awsp.FormatRemaining(time.Duration(*session.RemainingSeconds) * time.Second)
 }

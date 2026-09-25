@@ -24,12 +24,21 @@ const d11Note = "AWS profiles are switched by the human's own shell; " +
 
 const noTokenNote = "Never returns SSO token or credential values."
 
+// serverInstructions は initialize でクライアントへ渡す利用方針(D32)
+// ツールが遅延読み込みでも instructions は毎セッション読まれるので 別アカウントに届く手段がここにあることを伝える
+// 毎セッションのコンテキストを使うので短く保つ
+const serverInstructions = "Each profile in the local AWS config can reach a different AWS account and role. " +
+	"When a task targets an account other than the one you are using, call list_profiles to find a profile for it " +
+	"and run the aws CLI with --profile <name>, instead of concluding the account is unreachable or asking the human " +
+	"to run read-only commands. If the SSO session has expired, call login."
+
 // NewServer は 4 つのツール(auth_status list_profiles whoami login)を登録した MCP サーバーを作る(D1 D2)
+// initialize では利用方針(instructions)も返す(D32)
 //
 // ctx はログイン管理の内部フロー(D3 D4 D13)を回すための長寿命コンテキスト
 // stdio 接続そのものの寿命に紐づくものを渡すこと(個々のツール呼び出しの ctx を渡してはいけない)
 func NewServer(ctx context.Context, deps Deps, impl *sdkmcp.Implementation) *sdkmcp.Server {
-	server := sdkmcp.NewServer(impl, nil)
+	server := sdkmcp.NewServer(impl, &sdkmcp.ServerOptions{Instructions: serverInstructions})
 
 	h := &handlers{
 		deps:    deps,
@@ -42,6 +51,8 @@ func NewServer(ctx context.Context, deps Deps, impl *sdkmcp.Implementation) *sdk
 		Description: "Report whether the AWS SSO sessions found in the AWS config are currently valid. " +
 			"Reads only the local SSO token cache; makes no network calls. " +
 			"Use this at the start of a task to check whether login is needed before touching AWS. " +
+			"expiresAt is the access token's expiry; when autoRefresh is true the AWS CLI and SDKs renew it " +
+			"automatically, so a short remainingSeconds does not mean a login is needed soon. " +
 			d11Note + " " + noTokenNote,
 		Annotations: &sdkmcp.ToolAnnotations{
 			ReadOnlyHint:  true,

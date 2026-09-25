@@ -11,7 +11,7 @@
 | `awsp "(unset)"` | `AWS_PROFILE` と静的認証情報(`AWS_ACCESS_KEY_ID` など)を解除 |
 | `awsp current` | いまの `AWS_PROFILE` の caller identity。失効していれば自動ログイン |
 | `awsp whoami [profile]` | caller identity を確認するだけ。自動ログインしない。省略時は `AWS_PROFILE` |
-| `awsp list` | 一覧。認証状態と残り時間、認証情報取得時刻も見える |
+| `awsp list` | 一覧。認証状態と認証情報取得時刻も見える |
 | `awsp console [profile] [url]` | その profile の account / role でマネジメントコンソールをブラウザで開く。省略時は `AWS_PROFILE` |
 
 `awsp de<Tab>` で profile 名を補完できます。`login` と `whoami` の引数も同じです。Homebrew で入れた場合は補完スクリプトが一緒に入ります。手で置く場合は次のように生成します。
@@ -22,7 +22,7 @@ awsp completion bash > /etc/bash_completion.d/awsp
 awsp completion fish > ~/.config/fish/completions/awsp.fish
 ```
 
-対話 UI は広い端末では左に一覧、右に詳細を表示し、狭い端末では縦に並べます。各行に状態と残り時間が付き、現在の profile を ● で示して初期選択します。詳細が収まらない場合は PgUp/PgDn でスクロールできます。
+対話 UI は広い端末では左に一覧、右に詳細を表示し、狭い端末では縦に並べます。各行に状態が付き、現在の profile を ● で示して初期選択します。詳細が収まらない場合は PgUp/PgDn でスクロールできます。
 
 文字入力で検索を開始できます。q は検索中には文字として入力でき、検索中以外は中止に使います。q で始まる検索は / を押してから入力してください。Ctrl+C はどの状態でも中止します。
 
@@ -53,14 +53,17 @@ total=3  current=dev
 
 ```text
 $ awsp dev
-╭─────────── 🪪 AWS Caller Identity ───────────╮
-│ 🔐 Profile : dev                              │
-│ 🧾 Account : 123456789012                     │
-│ 👤 UserId  : AROA…:you@example.com            │
-│ 🌍 ARN     : arn:aws:sts::123456789012:…      │
-╰───────────────────────────────────────────────╯
+🪪 AWS Caller Identity
+╭────────────────────────────────────╮
+│ 🔐 Profile : dev                   │
+│ 🧾 Account : 123456789012          │
+│ 🎭 Role    : AdministratorAccess   │
+│ 👤 UserId  : AROA…:you@example.com │
+╰────────────────────────────────────╯
 ✅ Set AWS_PROFILE=dev
 ```
+
+端末の幅に収まらないときは枠を外して字下げだけで出します。ARN は `awsp current` か `--json` で見られます。
 
 `awsp <profile>` の結果を親シェルに反映するにはシェル連携が必要です。関数が `awsp ... --shell` の出力を `eval` します。
 
@@ -88,7 +91,7 @@ SSO を使わない profile(`source_profile` や静的認証情報)では deep l
 
 | コマンド | 何をするか |
 |---|---|
-| `awsp status [--json] [--grace 8h]` | sso-session ごとの有効・失効・残り時間。ネットワークは使わない |
+| `awsp status [--json] [--grace 8h]` | sso-session ごとの有効・失効。ネットワークは使わない |
 | `awsp login [profile]` | ブラウザで承認するだけのログイン。有効なら何もしない |
 | `awsp login --sso-session <name>` | profile ではなく sso-session を指定 |
 | `awsp login --no-browser` | ブラウザを開かず URL を表示するだけ |

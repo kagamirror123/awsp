@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,6 +62,21 @@ func baseDeps(t *testing.T) Deps {
 		CLICacheDir: t.TempDir(),
 		AWS:         &fakeAWSClient{},
 		Now:         func() time.Time { return time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC) },
+	}
+}
+
+func TestInitialize_ReturnsInstructions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cs := testServer(ctx, t, baseDeps(t))
+
+	// 別アカウントへは list_profiles で profile を探して --profile で届く、を伝えていること(D32)
+	got := cs.InitializeResult().Instructions
+	for _, want := range []string{"list_profiles", "--profile", "login"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("instructions に %q が無い: %q", want, got)
+		}
 	}
 }
 

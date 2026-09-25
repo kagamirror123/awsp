@@ -2,7 +2,6 @@ package prompt
 
 import (
 	"testing"
-	"time"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
@@ -124,10 +123,9 @@ func TestIsNavigationKey(t *testing.T) {
 func TestUpdateArrowKeyExitsFilteringAndMovesCursor(t *testing.T) {
 	t.Parallel()
 
-	now := time.Now()
 	model := newSelectModel([]list.Item{
-		profileItem{profile: awsp.Profile{Name: "dev", Region: "us-west-2"}, now: now},
-		profileItem{profile: awsp.Profile{Name: "prod", Region: "us-west-2"}, now: now},
+		profileItem{profile: awsp.Profile{Name: "dev", Region: "us-west-2"}},
+		profileItem{profile: awsp.Profile{Name: "prod", Region: "us-west-2"}},
 	})
 
 	updated, cmd := model.Update(tea.KeyPressMsg{Text: "a", Code: 'a'})

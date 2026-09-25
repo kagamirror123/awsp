@@ -16,7 +16,7 @@ import (
 // updateGolden は -update でゴールデンを書き直すためのフラグ
 var updateGolden = flag.Bool("update", false, "ゴールデンファイルを現在の出力で更新する")
 
-// goldenNow はゴールデンテストの基準時刻(残り時間表示を決定的にするため固定する)
+// goldenNow はゴールデンテストの基準時刻(詳細欄の時刻表示を決定的にするため固定する)
 var goldenNow = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // ゴールデンの描画に使う端末サイズ
@@ -61,7 +61,7 @@ func goldenProfiles() []awsp.Profile {
 func newGoldenModel(t *testing.T) tea.Model {
 	t.Helper()
 
-	model := newSelectModel(buildItems(goldenProfiles(), goldenNow))
+	model := newSelectModel(buildItems(goldenProfiles()))
 	model.location = time.UTC
 	return apply(t, model, tea.WindowSizeMsg{Width: goldenWidth, Height: goldenHeight})
 }

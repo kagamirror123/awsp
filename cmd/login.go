@@ -86,7 +86,7 @@ func newLoginCmdWithRunner(opts *rootOptions, runLogin loginRunner) *cobra.Comma
 
 			out := ui.NewWriter(cmd.OutOrStdout())
 			_, _ = fmt.Fprintln(out)
-			_, _ = fmt.Fprintln(out, renderLoginResult(result))
+			_, _ = fmt.Fprintln(out, renderLoginResult(result, ui.TerminalWidth(out)))
 			return nil
 		},
 	}
@@ -114,7 +114,9 @@ func openBrowserOption(noBrowser bool) func(string) error {
 	return func(string) error { return nil }
 }
 
-func renderLoginResult(result awsp.LoginResult) string {
+// renderLoginResult は login の結果カードを描画する
+// 切り替え後のカードと同じく ARN は載せずロール名だけにする(D33)
+func renderLoginResult(result awsp.LoginResult, maxWidth int) string {
 	lines := []string{
 		fmt.Sprintf("🔐 Session : %s", result.Session),
 		fmt.Sprintf("📶 State   : %s", result.State),
@@ -126,9 +128,11 @@ func renderLoginResult(result awsp.LoginResult) string {
 		lines = append(lines,
 			fmt.Sprintf("🪪 Profile : %s", result.Identity.Profile),
 			fmt.Sprintf("🧾 Account : %s", result.Identity.Account),
-			fmt.Sprintf("👤 UserId  : %s", result.Identity.UserID),
-			fmt.Sprintf("🌍 ARN     : %s", result.Identity.ARN),
 		)
+		if role := awscli.RoleName(result.Identity.ARN); role != "" {
+			lines = append(lines, fmt.Sprintf("🎭 Role    : %s", role))
+		}
+		lines = append(lines, fmt.Sprintf("👤 UserId  : %s", result.Identity.UserID))
 	}
-	return ui.RenderCard("✅ AWS SSO Login", lines)
+	return ui.RenderCard("✅ AWS SSO Login", lines, maxWidth)
 }
