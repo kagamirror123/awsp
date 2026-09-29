@@ -120,7 +120,13 @@ claude mcp add awsp -- awsp mcp
 エージェントが `aws` で認証エラーに当たったら `login` を呼び、あなたがブラウザで承認すれば続きが動きます。
 ブラウザを開けなければ URL を返し、再呼び出しで同じフローに合流します。
 
-登録方法、`login` の詳しい挙動、読み取り専用 config の作り方は **[docs/mcp.md](docs/mcp.md)**。
+profile の探し方や失効したときの作法は、エージェント向けのスキルにまとめてあります。MCP を登録しなくても CLI で同じ手順を踏めます。
+
+```bash
+npx skills add kagamirror123/awsp
+```
+
+登録方法、`login` の詳しい挙動、スキルの中身、読み取り専用 config の作り方は **[docs/mcp.md](docs/mcp.md)**。
 
 ## Design
 
