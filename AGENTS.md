@@ -58,6 +58,7 @@
 - `internal/prompt`: TUI
 - `internal/ui`: CLI 出力(カード・表・行・バッジ)の描画を Lip Gloss v2 に一本化する共通部品(D8)
 - `internal/mcp`: MCP サーバー(stdio)。auth_status / list_profiles / whoami / login の 4 ツール
+- `skills/awsp`: エージェント向けスキル(D35)。`npx skills add kagamirror123/awsp` で入る
 
 ## 主要コマンド
 
@@ -88,6 +89,9 @@
 2. `task lint`
 3. `task test`
 4. `task build`
+
+CLI のコマンドやフラグ、MCP のツール名や出力のフィールドを変えたら `skills/awsp/SKILL.md` も直す。
+SKILL.md に書いた `awsp` のコマンドとフラグは `task test` が CLI の定義と突き合わせる。
 
 ## 備考
 
