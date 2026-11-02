@@ -57,6 +57,20 @@ profile の切り替えは人間のシェル関数が行います。MCP から�
 人間用と AI 用で config を分けている場合、`currentProfile` がその config に無い名前のこともあります。
 `currentProfile` が出るのは、エージェントを `awsp <profile>` したシェルから起動したときだけです。デスクトップアプリなどシェル以外から起動すると `AWS_PROFILE` を引き継がないので出ません。
 
+## スキル
+
+ツールの説明と instructions に入りきらない作法を、エージェント向けのスキル [`skills/awsp/SKILL.md`](../skills/awsp/SKILL.md) にまとめてあります。
+profile の探し方、コマンドごとの `--profile`、失効したときの `login`、やらないこと(切り替え、権限の強い profile への乗り換え、トークンキャッシュの読み取り)です。
+MCP を登録していなくても、同じ手順を CLI の `--json` で踏めるように書いてあります。
+
+```bash
+npx skills add kagamirror123/awsp
+```
+
+入れる先のエージェント(Claude Code、Codex など)は対話で選べます。
+手で置くなら、`SKILL.md` を Claude Code は `~/.claude/skills/awsp/` に、Codex は `~/.agents/skills/awsp/` にコピーします。
+毎セッションのコンテキストに載るのは説明文(約 80 トークン)だけで、本文は AWS の作業で使うときに読まれます。
+
 ## 人間と AI で config を分ける
 
 awsp は `AWS_CONFIG_FILE` を尊重します。エージェントの環境変数に読み取り専用ロールだけを書いた config を指しておけば、
