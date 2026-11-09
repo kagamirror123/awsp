@@ -181,6 +181,42 @@ func TestLogin_ForceStartsFlowEvenWhenSessionIsValid(t *testing.T) {
 	})
 }
 
+func TestLogin_PicksUpLoginByAnotherProcess(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		force   bool
+		wantErr bool
+	}{
+		{name: "承認待ちの間に書かれたトークンを使う"},
+		{name: "Force では打ち切らない", force: true, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			session := awsconfig.SSOSession{Name: "corp", StartURL: "https://example.invalid/start", Region: "us-west-2"}
+			cacheDir := t.TempDir()
+			result, err := Login(context.Background(), session, "", LoginDeps{}, LoginOptions{
+				CacheDir: cacheDir,
+				Force:    tc.force,
+				Timeout:  time.Second,
+				// 認可画面を開いた直後に 別のプロセスがログインを済ませてキャッシュを書いた想定
+				OpenBrowser: func(string) error {
+					writeValidToken(t, cacheDir, session.CacheKey())
+					return nil
+				},
+				NewOIDCClient:      func(string) ssologin.OIDCClient { return &recoveryOIDC{} },
+				cacheWatchInterval: 10 * time.Millisecond,
+			})
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err=%v", err)
+			}
+			if !tc.wantErr && (result.Status != "ok" || result.ExpiresAt == nil || !result.ExpiresAt.After(time.Now())) {
+				t.Fatalf("result=%+v", result)
+			}
+		})
+	}
+}
+
 // writeValidToken は有効期限内のトークンキャッシュを書く
 func writeValidToken(t *testing.T, cacheDir string, key string) {
 	t.Helper()
