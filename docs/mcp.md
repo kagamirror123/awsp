@@ -32,6 +32,7 @@ args = ["mcp"]
 ### `login` の挙動
 
 - 期限内なら profile 指定時に STS で確認して `status: "ok"`。認証エラーなら再ログインし、通信障害や権限不足では元のエラーを返す
+- 期限切れでも refresh token が残っていれば、ブラウザを開く前にそれで更新する。更新できなかったときだけブラウザを開く
 - 開始処理を含めて承認完了まで待つ(既定 5 分、`timeout_seconds` で最大 15 分)。開始 API 自体は 30 秒で打ち切る
 - ブラウザを開けなかったか時間切れなら `status: "pending"` と認可 URL を返す。人が URL を開いて承認し、エージェントがもう一度 `login` を呼ぶと同じフローに合流して完了する
 - 開始待ちのまま期限を迎えた場合は `status: "pending", phase: "starting"` を返す。この時点では URL はない。再呼び出しで進捗を確認する。URL 確定後は `phase: "authorizing"`
@@ -49,7 +50,7 @@ MCP を登録すると、エージェントはツールの説明を読んで次�
 - 作業前に `auth_status` で先回りするかは、エージェントの判断に任される。確実にしたいならプロジェクトの `CLAUDE.md` や `AGENTS.md` に 1 行書く
 
 ```markdown
-- AWS を触る前に awsp の auth_status を呼び、失効していれば login を呼んでから続ける
+- AWS を触る前に awsp の auth_status を呼び、ok でなければ login を呼んでから続ける
 ```
 
 profile の切り替えは人間のシェル関数が行います。MCP からエージェント側の環境変数は変えられないので、

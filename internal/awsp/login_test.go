@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
+	ssooidctypes "github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/kagamirror123/awsp/internal/awsconfig"
 	"github.com/kagamirror123/awsp/internal/ssocache"
 	"github.com/kagamirror123/awsp/internal/ssologin"
@@ -214,6 +216,63 @@ func TestLogin_PicksUpLoginByAnotherProcess(t *testing.T) {
 				t.Fatalf("result=%+v", result)
 			}
 		})
+	}
+}
+
+func TestLogin_RefreshesBeforeOpeningBrowser(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		refreshErr  error
+		wantBrowser bool
+	}{
+		{name: "更新できればブラウザを開かない"},
+		{name: "更新できなければブラウザを開く", refreshErr: &ssooidctypes.InvalidGrantException{}, wantBrowser: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			session := awsconfig.SSOSession{Name: "corp", StartURL: "https://example.invalid/start", Region: "us-west-2"}
+			cacheDir := t.TempDir()
+			writeExpiredToken(t, cacheDir, session.CacheKey())
+			opened := false
+			result, err := Login(context.Background(), session, "", LoginDeps{}, LoginOptions{
+				CacheDir:      cacheDir,
+				Timeout:       time.Second,
+				OpenBrowser:   func(string) error { opened = true; return nil },
+				NewOIDCClient: func(string) ssologin.OIDCClient { return &refreshOIDC{refreshErr: tc.refreshErr} },
+			})
+			if opened != tc.wantBrowser {
+				t.Fatalf("opened=%v err=%v", opened, err)
+			}
+			if !tc.wantBrowser && (err != nil || result.Status != "ok" || result.ExpiresAt == nil || !result.ExpiresAt.After(time.Now())) {
+				t.Fatalf("result=%+v err=%v", result, err)
+			}
+		})
+	}
+}
+
+// refreshOIDC は refresh_token grant だけを失敗させられる
+type refreshOIDC struct {
+	recoveryOIDC
+	refreshErr error
+}
+
+func (c *refreshOIDC) CreateToken(ctx context.Context, in *ssooidc.CreateTokenInput, optFns ...func(*ssooidc.Options)) (*ssooidc.CreateTokenOutput, error) {
+	if in.GrantType != nil && *in.GrantType == "refresh_token" && c.refreshErr != nil {
+		return nil, c.refreshErr
+	}
+	return c.recoveryOIDC.CreateToken(ctx, in, optFns...)
+}
+
+// writeExpiredToken は期限切れで refreshToken のあるトークンキャッシュを書く
+func writeExpiredToken(t *testing.T, cacheDir string, key string) {
+	t.Helper()
+
+	body := `{"startUrl":"https://example.invalid/start","region":"us-west-2","accessToken":"dummy",` +
+		`"clientId":"test-client","clientSecret":"test-secret","refreshToken":"dummy-refresh",` +
+		`"expiresAt":"` + time.Now().Add(-time.Hour).UTC().Format(time.RFC3339) + `"}`
+	if err := os.WriteFile(ssocache.TokenPath(cacheDir, key), []byte(body), 0o600); err != nil {
+		t.Fatalf("トークンキャッシュを書けません: %v", err)
 	}
 }
 
