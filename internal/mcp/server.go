@@ -53,6 +53,8 @@ func NewServer(ctx context.Context, deps Deps, impl *sdkmcp.Implementation) *sdk
 			"Use this at the start of a task to check whether login is needed before touching AWS. " +
 			"expiresAt is the access token's expiry; when autoRefresh is true the AWS CLI and SDKs renew it " +
 			"automatically, so a short remainingSeconds does not mean a login is needed soon. " +
+			"If a session is not ok, call login before touching AWS: it first renews the session with the cached " +
+			"refresh token and opens a browser only if that fails. " +
 			d11Note + " " + noTokenNote,
 		Annotations: &sdkmcp.ToolAnnotations{
 			ReadOnlyHint:  true,
@@ -95,6 +97,7 @@ func NewServer(ctx context.Context, deps Deps, impl *sdkmcp.Implementation) *sdk
 			"URL and entering a code (useful for remote/headless environments), but device-code grants may " +
 			"be disabled by the organization's Identity Center. " +
 			"If the cached token is unexpired, verifies the caller identity when a profile is given; reauthenticates on an invalid or expired token, but returns network or permission errors without reopening a browser. " +
+			"If it has expired but a refresh token is cached, renews it first and opens a browser only if that fails. " +
 			"If the browser cannot be opened automatically, returns status=pending immediately with " +
 			"authorizationUrl (and userCode for device_code) for the human to open manually; call login " +
 			"again with the same target to join that same in-progress flow and keep waiting. " +

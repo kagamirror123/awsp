@@ -29,7 +29,7 @@ awsp completion fish > ~/.config/fish/completions/awsp.fish
 | 記号 | 意味 |
 |---|---|
 | 🟢 | SSO セッションが有効 |
-| 🟡 | 期限切れだが refresh token があり、名前付き sso-session では使用時に自動更新を試みる(成功は未確認) |
+| 🟡 | 期限切れだが refresh token がある。ログインするとき、ブラウザを開く前にこれで更新を試みる(成功は未確認) |
 | 🔴 | 失効。ログインが必要 |
 | ⚪ | 未ログイン |
 | 🪪 | SSO を使わない profile(静的認証情報や `source_profile`) |
@@ -122,7 +122,7 @@ exit=1
 | 状態 | 条件 |
 |---|---|
 | `ok` | トークンの期限内 |
-| `warning` | 期限切れだが refresh token があり、猶予(既定 8 時間)以内。名前付き sso-session に限り、SDK が使用時に自動更新を試みる。認証エラーなら `awsp login <profile>` を実行 |
+| `warning` | 期限切れだが refresh token があり、猶予(既定 8 時間)以内。`awsp login <profile>` を実行する。refresh token で更新できればブラウザは開かない |
 | `error` | legacy 形式の期限切れ、refresh token が無い、猶予超過、またはキャッシュを読めない。`awsp login` が必要 |
 | `unknown` | トークンキャッシュが無い(未ログイン) |
 

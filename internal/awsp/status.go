@@ -131,7 +131,7 @@ func PreflightLine(report StatusReport) (string, int) {
 	case ssocache.StateWarning:
 		elapsed := -safeDuration(group[0].RemainingSeconds)
 		return fmt.Sprintf(
-			"awsp preflight: AWS SSO 失効(%s %s 前)。使用時に自動更新を試みます。認証エラーなら '%s' を実行してください",
+			"awsp preflight: AWS SSO 失効(%s %s 前)。'%s' を実行してください。自動更新できればブラウザは開きません",
 			names, formatDuration(elapsed), hint,
 		), exitCode
 
@@ -251,7 +251,7 @@ func summarizeSession(session awsconfig.SSOSession, eval ssocache.Evaluation) st
 		}
 		return fmt.Sprintf("有効(残り %s)", formatDuration(eval.Remaining))
 	case ssocache.StateWarning:
-		return fmt.Sprintf("失効(%s 前)。使用時に自動更新を試みます。認証エラーなら '%s' を実行してください", formatDuration(-eval.Remaining), hint)
+		return fmt.Sprintf("失効(%s 前)。'%s' を実行してください。自動更新できればブラウザは開きません", formatDuration(-eval.Remaining), hint)
 	case ssocache.StateError:
 		return fmt.Sprintf("失効(%s 前)。'%s' を実行してください", formatDuration(-eval.Remaining), hint)
 	default: // unknown

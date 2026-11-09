@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/kagamirror123/awsp/internal/awscli"
 	"github.com/kagamirror123/awsp/internal/awsconfig"
@@ -69,7 +70,17 @@ type LoginOptions struct {
 	// NewOIDCClient は sso-session の region から OIDC クライアントを作る
 	// 未指定時は ssooidc.New を使う(テストでフェイクへ差し替えるための注入点)
 	NewOIDCClient func(region string) ssologin.OIDCClient
+
+	// cacheWatchInterval は承認待ちの間にトークンキャッシュを読み直す間隔 未指定時は defaultCacheWatchInterval
+	cacheWatchInterval time.Duration
 }
+
+// defaultCacheWatchInterval は承認待ちの間にトークンキャッシュを読み直す既定の間隔(D35)
+const defaultCacheWatchInterval = 2 * time.Second
+
+// apiTimeout は承認待ちの前に呼ぶ API(トークンの更新・クライアント登録・開始)の上限
+// 応答しない場合も 承認待ちとは別の短い上限で終わらせる
+const apiTimeout = 30 * time.Second
 
 // LoginDeps は Login が使う外部依存
 type LoginDeps struct {
@@ -161,15 +172,31 @@ func Login(ctx context.Context, session awsconfig.SSOSession, profile string, de
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	newClient := opts.NewOIDCClient
+	if newClient == nil {
+		newClient = func(region string) ssologin.OIDCClient {
+			return ssooidc.New(ssooidc.Options{Region: region})
+		}
+	}
+
 	now := time.Now()
 	if opts.Now != nil {
 		now = opts.Now()
 	}
+	tokenPath := ssocache.TokenPath(cacheDir, session.CacheKey())
 	state := ssocache.StateUnknown
+	var before ssocache.TokenMeta
 	if !opts.Force {
-		meta, err := ssocache.ReadTokenMeta(ssocache.TokenPath(cacheDir, session.CacheKey()))
+		meta, err := ssocache.ReadTokenMeta(tokenPath)
 		eval := evaluateSession(session, meta, now, grace)
 		state = eval.State
+		if err == nil && state != ssocache.StateOK && eval.AutoRefresh {
+			// 期限切れでも refreshToken が効けば ブラウザを開かずに取り直す(D36)
+			if refreshed, ok := refreshAccessToken(waitCtx, newClient(session.Region), tokenPath); ok {
+				meta, state, eval.ExpiresAt = refreshed, ssocache.StateOK, refreshed.ExpiresAt
+			}
+		}
+		before = meta
 		if err != nil {
 			// 壊れたキャッシュも通常のログインで修復できる。保存時のエラーは別途返す。
 			state = ssocache.StateError
@@ -183,18 +210,9 @@ func Login(ctx context.Context, session awsconfig.SSOSession, profile string, de
 		}
 	}
 
-	newClient := opts.NewOIDCClient
-	if newClient == nil {
-		newClient = func(region string) ssologin.OIDCClient {
-			return ssooidc.New(ssooidc.Options{Region: region})
-		}
-	}
-	oidcClient := newClient(session.Region)
-
-	// 登録 API が応答しない場合も、承認待ちとは別の短い上限で終了させる。
-	startCtx, cancelStart := context.WithTimeout(waitCtx, 30*time.Second)
+	startCtx, cancelStart := context.WithTimeout(waitCtx, apiTimeout)
 	flow, err := ssologin.Start(startCtx, session, ssologin.Options{
-		Client:        oidcClient,
+		Client:        newClient(session.Region),
 		CacheDir:      cacheDir,
 		OpenBrowser:   opts.OpenBrowser,
 		UseDeviceCode: opts.UseDeviceCode,
@@ -211,12 +229,80 @@ func Login(ctx context.Context, session awsconfig.SSOSession, profile string, de
 
 	flowCtx, cancelFlow := context.WithDeadline(waitCtx, flow.ExpiresAt)
 	defer cancelFlow()
-	result, err := flow.Wait(flowCtx)
+	var result ssologin.Result
+	if opts.Force {
+		// --force は画面や挙動を確かめるためのやり直しなので 他のプロセスの更新で打ち切らない(D35)
+		result, err = flow.Wait(flowCtx)
+	} else {
+		result, err = waitFlowOrOtherLogin(flowCtx, flow, tokenPath, before.ExpiresAt, opts.cacheWatchInterval)
+	}
 	if err != nil {
 		return LoginResult{}, err
 	}
 
 	return finishLogin(waitCtx, session, profile, ssocache.StateOK, &result.ExpiresAt, deps)
+}
+
+// waitFlowOrOtherLogin は承認を待ちながらトークンキャッシュを読み直す
+// 待ち始める前と違う有効なトークンが書かれたら 自分の承認を待たずにそれを使う(D35)
+// 書き手は別のプロセス(エージェントのセッションごとの awsp mcp や aws sso login)で
+// MCP の合流(D4)はプロセスをまたがないため ここで揃える
+func waitFlowOrOtherLogin(
+	ctx context.Context,
+	flow *ssologin.Flow,
+	tokenPath string,
+	before time.Time,
+	interval time.Duration,
+) (ssologin.Result, error) {
+	if interval <= 0 {
+		interval = defaultCacheWatchInterval
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type outcome struct {
+		result ssologin.Result
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := flow.Wait(ctx)
+		done <- outcome{result: result, err: err}
+	}()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case o := <-done:
+			return o.result, o.err
+		case <-ticker.C:
+			meta, err := ssocache.ReadTokenMeta(tokenPath)
+			if err != nil || !meta.Exists || !meta.ExpiresAt.After(time.Now()) || meta.ExpiresAt.Equal(before) {
+				continue
+			}
+			// 自分のフローを止め コールバックサーバーが閉じてから返す
+			cancel()
+			<-done
+			return ssologin.Result{ExpiresAt: meta.ExpiresAt, HasRefreshToken: meta.HasRefreshToken}, nil
+		}
+	}
+}
+
+// refreshAccessToken は期限切れのアクセストークンを refreshToken で取り直す(D36)
+// SDK / CLI が使うときと同じ更新(ssocreds.SSOTokenProvider)なので キャッシュも同じ形で書き戻る
+// 更新できなければ false を返し 呼び出し側はブラウザでのログインに進む
+func refreshAccessToken(ctx context.Context, client ssologin.OIDCClient, tokenPath string) (ssocache.TokenMeta, bool) {
+	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
+	defer cancel()
+	if _, err := ssocreds.NewSSOTokenProvider(client, tokenPath).RetrieveBearerToken(ctx); err != nil {
+		return ssocache.TokenMeta{}, false
+	}
+	meta, err := ssocache.ReadTokenMeta(tokenPath)
+	if err != nil || !meta.ExpiresAt.After(time.Now()) {
+		return ssocache.TokenMeta{}, false
+	}
+	return meta, true
 }
 
 func finishLogin(
