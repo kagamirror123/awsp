@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/kagamirror123/awsp/internal/awsconfig"
 )
@@ -136,7 +137,7 @@ type authorizeURLParams struct {
 func buildAuthorizationURL(opts Options, session awsconfig.SSOSession, p authorizeURLParams) string {
 	base := strings.TrimSuffix(opts.AuthorizeBaseURL, "/")
 	if base == "" {
-		base = defaultAuthorizeBaseURL(session.Region)
+		base = defaultAuthorizeBaseURL(session.Region, opts.DualStack)
 	}
 
 	query := url.Values{}
@@ -152,13 +153,16 @@ func buildAuthorizationURL(opts Options, session awsconfig.SSOSession, p authori
 }
 
 // defaultAuthorizeBaseURL は sso_region から認可エンドポイントのベース URL を導出する
-// 中国リージョン(cn- 始まり)は .amazonaws.com.cn を使う
-func defaultAuthorizeBaseURL(region string) string {
-	domain := "amazonaws.com"
-	if strings.HasPrefix(region, "cn-") {
-		domain = "amazonaws.com.cn"
+// API と同じ SDK のエンドポイント規則を使うので 中国リージョンや dual-stack(D37)でも API と食い違わない
+func defaultAuthorizeBaseURL(region string, dualStack bool) string {
+	endpoint, err := ssooidc.NewDefaultEndpointResolverV2().ResolveEndpoint(context.Background(), ssooidc.EndpointParameters{
+		Region:       aws.String(region),
+		UseDualStack: aws.Bool(dualStack),
+	})
+	if err != nil {
+		return fmt.Sprintf("https://oidc.%s.amazonaws.com", region)
 	}
-	return fmt.Sprintf("https://oidc.%s.%s", region, domain)
+	return strings.TrimSuffix(endpoint.URI.String(), "/")
 }
 
 // generateCodeVerifier は PKCE の code_verifier を crypto/rand で生成する

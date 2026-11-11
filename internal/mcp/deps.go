@@ -35,8 +35,8 @@ type Deps struct {
 	CLICacheDir string
 	// AWS は STS の呼び出し主体確認に使う(whoami / login 後の identity 取得)
 	AWS awsp.AWSIdentityClient
-	// NewOIDCClient は sso-session の region から OIDC クライアントを作る
-	// 本番では ssooidc.New(ssooidc.Options{Region: region}) を渡す
+	// NewOIDCClient はテストで OIDC クライアントをフェイクに差し替える
+	// 本番は nil にして awsp.Login の既定(sso-session に合わせたエンドポイント)を使う
 	NewOIDCClient func(region string) ssologin.OIDCClient
 	// OpenBrowser は認可 URL を開く関数 nil なら ssologin の既定(OS 標準のオープンコマンド)
 	OpenBrowser func(url string) error

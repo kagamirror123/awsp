@@ -139,6 +139,8 @@ exit=1
 Authorization Code + PKCE を Go で実装しています。`awsp login` は 127.0.0.1 の空きポートで待ち受けを始めてブラウザを開き、
 「Allow access」を押すと localhost に戻って自動で完了します。書き出したトークンキャッシュは aws CLI や各言語の SDK がそのまま使います。
 
+アクセスポータルの URL が `*.app.aws`(IPv6 対応の dual-stack に移した Identity Center)なら、認可は dual-stack の OIDC エンドポイント(`oidc.<region>.api.aws`)から始めます。IPv4 のエンドポイントから始めると、dual-stack の ACS URL だけを登録した IdP(Google Workspace など)がサインインを弾き、ブラウザに「サインイン認証情報を確認できませんでした」と出ます。URL から決められない場合は `AWS_USE_DUALSTACK_ENDPOINT=true` / `false` で指定できます。
+
 ## JSON 出力
 
 `current` / `list` / `status` / `login` / `whoami` / `console` は `--json` で機械可読になります。すべて `schemaVersion` を持ち、トークン値は含みません。`list --json` は `AWS_PROFILE` が設定されていれば `currentProfile` にその名前を載せます。成功時の stdout 全体が 1 つの JSON になり、承認 URL や案内は stderr に出ます。whoami はフラットな profile / account / userId / arn、login は CLI と MCP 共通の型です。

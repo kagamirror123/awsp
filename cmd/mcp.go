@@ -4,14 +4,12 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 
 	"github.com/kagamirror123/awsp/internal/awscli"
 	mcpserver "github.com/kagamirror123/awsp/internal/mcp"
 	"github.com/kagamirror123/awsp/internal/ssocache"
-	"github.com/kagamirror123/awsp/internal/ssologin"
 )
 
 // newMCPCmd は awsp を MCP サーバー(stdio)として起動するコマンドを作る(D1 D2)
@@ -42,9 +40,6 @@ func newMCPCmd() *cobra.Command {
 				SSOCacheDir: ssoCacheDir,
 				CLICacheDir: cliCacheDir,
 				AWS:         awscli.NewClient(),
-				NewOIDCClient: func(region string) ssologin.OIDCClient {
-					return ssooidc.New(ssooidc.Options{Region: region})
-				},
 				// 起動元シェルの AWS_PROFILE を人間の選択としてエージェントに伝える(D30)
 				CurrentProfile: func() string { return os.Getenv("AWS_PROFILE") },
 			}
