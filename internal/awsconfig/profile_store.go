@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -61,6 +62,14 @@ func (s SSOSession) CacheKey() string {
 		return s.Name
 	}
 	return s.StartURL
+}
+
+// DualStack はアクセスポータルの URL が dual-stack(*.app.aws)かどうかを返す
+// dual-stack に移した Identity Center は IdP に dual-stack の ACS URL しか無いことがあり
+// IPv4 の OIDC エンドポイントから認可を始めると IdP に弾かれる(D37)
+func (s SSOSession) DualStack() bool {
+	u, err := url.Parse(s.StartURL)
+	return err == nil && strings.HasSuffix(u.Hostname(), ".app.aws")
 }
 
 // IsLegacy は sso-session を使わない旧形式(profile 直書き)かどうかを返す

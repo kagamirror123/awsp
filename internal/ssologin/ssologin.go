@@ -93,8 +93,11 @@ type Options struct {
 	// ListenAddr は PKCE のローカルコールバックサーバーの listen アドレス
 	// 未指定時は "127.0.0.1:0"(空きポート) テストでの固定に使う想定
 	ListenAddr string
+	// DualStack を true にすると認可 URL を dual-stack のエンドポイント(oidc.<region>.api.aws)にする(D37)
+	// Client のエンドポイントと同じ系統にそろえる
+	DualStack bool
 	// AuthorizeBaseURL は認可 URL のベース(スキーム+ホスト、末尾スラッシュ無し)
-	// 未指定時は sso_region から "https://oidc.<region>.amazonaws.com"(cn- は .com.cn)を導出する
+	// 未指定時は sso_region と DualStack から SDK のエンドポイント規則で導出する
 	// テストで実サーバーの代わりに差し替えるためのフック
 	AuthorizeBaseURL string
 }

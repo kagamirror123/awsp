@@ -237,3 +237,22 @@ func TestResolveSession(t *testing.T) {
 		}
 	})
 }
+
+func TestSSOSession_DualStack(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		startURL string
+		want     bool
+	}{
+		{startURL: "https://ssoins-0123456789abcdef.portal.us-west-2.app.aws", want: true},
+		{startURL: "https://ssoins-0123456789abcdef.portal.us-west-2.app.aws/", want: true},
+		{startURL: "https://d-0123456789.awsapps.com/start", want: false},
+		{startURL: "https://identitycenter.amazonaws.com/ssoins-0123456789abcdef", want: false},
+		{startURL: "", want: false},
+	} {
+		if got := (SSOSession{StartURL: tc.startURL}).DualStack(); got != tc.want {
+			t.Errorf("DualStack(%q)=%v want %v", tc.startURL, got, tc.want)
+		}
+	}
+}

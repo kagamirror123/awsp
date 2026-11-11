@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	ssooidctypes "github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/kagamirror123/awsp/internal/awsconfig"
@@ -262,6 +263,56 @@ func (c *refreshOIDC) CreateToken(ctx context.Context, in *ssooidc.CreateTokenIn
 		return nil, c.refreshErr
 	}
 	return c.recoveryOIDC.CreateToken(ctx, in, optFns...)
+}
+
+func TestDualStackState(t *testing.T) {
+	t.Parallel()
+
+	appAWS := awsconfig.SSOSession{StartURL: "https://ssoins-0123456789abcdef.portal.us-west-2.app.aws"}
+	awsapps := awsconfig.SSOSession{StartURL: "https://d-0123456789.awsapps.com/start"}
+	for _, tc := range []struct {
+		name    string
+		session awsconfig.SSOSession
+		env     map[string]string
+		want    aws.DualStackEndpointState
+	}{
+		{name: "app.aws のポータルは dual-stack", session: appAWS, want: aws.DualStackEndpointStateEnabled},
+		{name: "awsapps.com のポータルは既定のまま", session: awsapps, want: aws.DualStackEndpointStateUnset},
+		{name: "環境変数で有効にできる", session: awsapps, env: map[string]string{"AWS_USE_DUALSTACK_ENDPOINT": "true"}, want: aws.DualStackEndpointStateEnabled},
+		{name: "環境変数で無効にできる", session: appAWS, env: map[string]string{"AWS_USE_DUALSTACK_ENDPOINT": "false"}, want: aws.DualStackEndpointStateDisabled},
+		{name: "読めない値は無視する", session: appAWS, env: map[string]string{"AWS_USE_DUALSTACK_ENDPOINT": "yes please"}, want: aws.DualStackEndpointStateEnabled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			lookup := func(key string) (string, bool) {
+				value, ok := tc.env[key]
+				return value, ok
+			}
+			if got := dualStackState(tc.session, lookup); got != tc.want {
+				t.Fatalf("got %v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// app.aws のポータルなら dual-stack の認可 URL(oidc.<region>.api.aws)を開く(D37)
+func TestLogin_OpensDualStackAuthorizeURLForAppAWSPortal(t *testing.T) {
+	if _, ok := os.LookupEnv("AWS_USE_DUALSTACK_ENDPOINT"); ok {
+		t.Skip("AWS_USE_DUALSTACK_ENDPOINT が設定されている")
+	}
+
+	session := awsconfig.SSOSession{Name: "corp", StartURL: "https://ssoins-0123456789abcdef.portal.us-west-2.app.aws", Region: "us-west-2"}
+	opened := ""
+	_, _ = Login(context.Background(), session, "", LoginDeps{}, LoginOptions{
+		CacheDir:      t.TempDir(),
+		Timeout:       time.Second,
+		OpenBrowser:   func(rawURL string) error { opened = rawURL; return nil },
+		NewOIDCClient: func(string) ssologin.OIDCClient { return &recoveryOIDC{} },
+	})
+	if !strings.HasPrefix(opened, "https://oidc.us-west-2.api.aws/authorize?") {
+		t.Fatalf("opened=%s", opened)
+	}
 }
 
 // writeExpiredToken は期限切れで refreshToken のあるトークンキャッシュを書く

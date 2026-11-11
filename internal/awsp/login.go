@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/kagamirror123/awsp/internal/awscli"
@@ -68,7 +71,7 @@ type LoginOptions struct {
 	// 既定(false)は有効なら何もせず即返す(D4)
 	Force bool
 	// NewOIDCClient は sso-session の region から OIDC クライアントを作る
-	// 未指定時は ssooidc.New を使う(テストでフェイクへ差し替えるための注入点)
+	// 未指定時は sso-session に合わせたエンドポイントの ssooidc クライアントを使う(テストでフェイクへ差し替えるための注入点)
 	NewOIDCClient func(region string) ssologin.OIDCClient
 
 	// cacheWatchInterval は承認待ちの間にトークンキャッシュを読み直す間隔 未指定時は defaultCacheWatchInterval
@@ -172,10 +175,15 @@ func Login(ctx context.Context, session awsconfig.SSOSession, profile string, de
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// 認可 URL と API のエンドポイントは同じ系統にそろえる(D37)
+	dualStack := dualStackState(session, os.LookupEnv)
 	newClient := opts.NewOIDCClient
 	if newClient == nil {
 		newClient = func(region string) ssologin.OIDCClient {
-			return ssooidc.New(ssooidc.Options{Region: region})
+			return ssooidc.New(ssooidc.Options{
+				Region:          region,
+				EndpointOptions: ssooidc.EndpointResolverOptions{UseDualStackEndpoint: dualStack},
+			})
 		}
 	}
 
@@ -216,6 +224,7 @@ func Login(ctx context.Context, session awsconfig.SSOSession, profile string, de
 		CacheDir:      cacheDir,
 		OpenBrowser:   opts.OpenBrowser,
 		UseDeviceCode: opts.UseDeviceCode,
+		DualStack:     dualStack == aws.DualStackEndpointStateEnabled,
 	})
 	cancelStart()
 	if err != nil {
@@ -287,6 +296,23 @@ func waitFlowOrOtherLogin(
 			return ssologin.Result{ExpiresAt: meta.ExpiresAt, HasRefreshToken: meta.HasRefreshToken}, nil
 		}
 	}
+}
+
+// dualStackState は OIDC エンドポイントを dual-stack にするかを決める(D37)
+// AWS_USE_DUALSTACK_ENDPOINT があればそれに従い 無ければアクセスポータルの URL で決める
+func dualStackState(session awsconfig.SSOSession, lookupEnv func(string) (string, bool)) aws.DualStackEndpointState {
+	if value, ok := lookupEnv("AWS_USE_DUALSTACK_ENDPOINT"); ok {
+		if enabled, err := strconv.ParseBool(value); err == nil {
+			if enabled {
+				return aws.DualStackEndpointStateEnabled
+			}
+			return aws.DualStackEndpointStateDisabled
+		}
+	}
+	if session.DualStack() {
+		return aws.DualStackEndpointStateEnabled
+	}
+	return aws.DualStackEndpointStateUnset
 }
 
 // refreshAccessToken は期限切れのアクセストークンを refreshToken で取り直す(D36)

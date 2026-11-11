@@ -1,6 +1,6 @@
 # awsp 設計ドキュメント: AI ネイティブ化
 
-状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正と D24〜D36 を反映。設計の正典はこのファイル。
+状態: 2026-09-16 の設計に基づく実装済み。2026-09-18 のレビュー修正と D24〜D37 を反映。設計の正典はこのファイル。
 確定した項目は「決定事項」へ、退けた案は「却下した案」へ移し、理由を必ず残す。
 
 ## 1. 目的
@@ -44,7 +44,7 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | D9 | TUI | 一覧行に認証状態と現在値の印を載せる。詳細には認証情報取得時刻を表示する。**2026-09-25 改訂**: 一覧行の残り時間は外した(D34) | 選ぶ時点で「使えるか」が見える。残り時間はアクセストークンの残りで、同じ sso-session の profile には同じ値が並ぶだけだった |
 | D10 | 非 TTY | stdin が端末でなければ TUI を出さず、次のコマンドを含むエラーで終わる | エージェントが誤って対話 UI を起こしても固まらない |
 | D11 | 切り替え | AWS_PROFILE の切り替えは人間用のシェル関数(D24)に残す。エージェントは list_profiles で名前を知り `--profile` を付けて叩く | MCP からエージェントの Bash の環境変数は変えられない |
-| D12 | SSO ログインの実装 | aws CLI の exec をやめ、SDK(ssooidc)で **Authorization Code + PKCE**(localhost へのリダイレクト)を Go で持つ。CLI 互換の `~/.aws/sso/cache` を書く。人間の `awsp login` も同じ実装。device code は `--use-device-code` の opt-in として残す | URL とコードが構造化で取れ、D4 が素直に実装できる。更新前は保守負荷を理由に CLI へ委譲していた(`internal/awscli/client.go`)が、当時は自前実装の便益がゼロだった。要件が変わったので覆す。条件: 「awsp が書いたトークンで `aws sts get-caller-identity` が通る」検証を手順に残す。**2026-09-16 改訂**: 当初は device code を採用したが、作者の Identity Center では公式 CLI の `--use-device-code` でも承認画面で「サインイン認証情報を確認できませんでした」と弾かれ、device code の grant 自体が通らないと判明。CLI 既定と同じ PKCE に切り替えた。OIDC クライアント登録は追加のキャッシュ管理を避けるため毎回新規に行う。登録 URI はポートなしであり、再利用は技術的には可能 |
+| D12 | SSO ログインの実装 | aws CLI の exec をやめ、SDK(ssooidc)で **Authorization Code + PKCE**(localhost へのリダイレクト)を Go で持つ。CLI 互換の `~/.aws/sso/cache` を書く。人間の `awsp login` も同じ実装。device code は `--use-device-code` の opt-in として残す | URL とコードが構造化で取れ、D4 が素直に実装できる。更新前は保守負荷を理由に CLI へ委譲していた(`internal/awscli/client.go`)が、当時は自前実装の便益がゼロだった。要件が変わったので覆す。条件: 「awsp が書いたトークンで `aws sts get-caller-identity` が通る」検証を手順に残す。**2026-09-16 改訂**: 当初は device code を採用したが、作者の Identity Center では公式 CLI の `--use-device-code` でも承認画面で「サインイン認証情報を確認できませんでした」と弾かれ、device code の grant 自体が通らないと判明。CLI 既定と同じ PKCE に切り替えた。OIDC クライアント登録は追加のキャッシュ管理を避けるため毎回新規に行う。登録 URI はポートなしであり、再利用は技術的には可能。**2026-11-11 追記**: device code が弾かれた本当の原因は grant ではなく、IPv4 の OIDC エンドポイントと dual-stack の ACS URL の食い違いだった(D37) |
 | D13 | login の待ちと通知 | 待ち上限は開始処理を含めて既定 5 分、フラグで変更可。登録・開始 API には別途 30 秒の上限を設ける。MCP では開始待ちのまま呼び出し期限を迎えた場合も pending (phase=starting、URL なし) を返す。認可 URL が確定した後は phase=authorizing。共有処理はサーバーの寿命と認可期限、最大 15 分で終了する。MCP では進行通知で認可 URL を流す(PKCE ではコードは無い。device code 時だけ userCode が付く)。ブラウザ起動に失敗したら認可 URL を結果に入れて即返し(pending)、フローはサーバー内で継続、次の login 呼び出しが合流してブロックする | 進行通知を表示しないクライアントでも人に URL が届く |
 | D14 | 判定単位 | sso-session 単位。config に複数あれば全部判定し、1 つでも error なら overall は error | profile は同じ session を共有するので profile 単位は冗長 |
 | D15 | 読み取り専用 config の派生生成 | **2026-09-16 に撤回し却下へ**(§5 参照) | — |
@@ -69,6 +69,7 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | D34 | 残り時間の出し方 | 自動更新が効く(名前付き sso-session で refreshToken がある)とき、ok の表示に残り時間を出さない。`status` / `auth_status` / `preflight` の要約は「有効(自動更新あり)」、`status` 表の Remaining は「自動更新」。TUI の一覧行と `list` 表の残り時間は外す。自動更新が効かない legacy 形式などは従来どおり残り時間を出す。JSON は `expiresAt` / `remainingSeconds` を残し、任意フィールド `autoRefresh` を足す(schemaVersion は 1 のまま) | 残り時間はアクセストークン(1 時間)の残りで、SDK / CLI が refreshToken で取り直すので、ok ならいつ見ても 1 時間弱になる。「あと何分でログインし直し」と読めてしまう。2026-09-18 に「残り 35m」と出たあと 8 時間使えた。本当の期限(セッション終端)はキャッシュに無い(Q12)。TUI では全 profile の右に同じ値が並んで邪魔だった(2026-09-25) |
 | D35 | 別のプロセスのログインを拾う | 承認待ちの間、トークンキャッシュを 2 秒おきに読み直す。待ち始める前と違う有効なトークンが書かれたら、自分の承認を待たずにそれを使って返す。`--force` では読み直さない | D4 の合流は同じプロセスの中だけで、エージェントのセッションごとに `awsp mcp` は別のプロセスになる。2026-10-27 に 2 つのセッションが 1 分半違いで login を呼んでタブが 2 つ開き、作者が後のほうを承認すると、先のセッションは自分のタブの承認だけを待ち続けて 10 分で失敗した。キャッシュは CLI 互換なので、誰が書いたトークンでも SDK / CLI はそのまま使える。読むのは expiresAt と refreshToken の有無だけ(§3)。2 本目のタブを開かないようプロセス間でフローを 1 本にまとめる案は、落ちたプロセスのロックの後始末が増えるわりに、防げるのは承認しないタブが 1 つ残ることだけなので採らない。`--force` は画面や挙動を確かめるためのやり直しなので、ほかの更新で終わらせない(2026-11-09) |
 | D36 | 期限切れ後の login | 期限切れでも refreshToken があれば、login はブラウザを開く前に SDK / CLI と同じ更新(`ssocreds.SSOTokenProvider`)を試し、できたらそのトークンで返す。だめならこれまでどおりブラウザで承認を求める。warning の案内は「使用時に自動更新を試みる」から「login を実行」に変え、MCP の説明でも ok 以外は login を呼ぶよう伝える。Q10 はこれで決定 | 2026-10-14〜10-26 に warning が 5 回出て、5 回とも自動更新に失敗した。エージェントは案内どおり aws を先に叩いて失敗し、それから login を呼んでいた。warning は D18 の推定で、セッション終端はキャッシュに無い(Q12)ので当てにならない。かといって warning で login を呼ばせると、更新できる場面でもブラウザの承認を求めることになり、D23 に反する。login が先に更新を試せば、エージェントには「ok 以外は login」とだけ伝えれば足りる。猶予を超えた error でも refreshToken があれば試す。Identity Center のセッション期間を 8 時間より長くしている組織では更新が効くためで、失敗しても API 1 回分で済む(2026-11-10) |
+| D37 | dual-stack の Identity Center | アクセスポータルの URL が `*.app.aws` なら、OIDC の API と認可 URL の両方を dual-stack のエンドポイント(`oidc.<region>.api.aws`)にする。`AWS_USE_DUALSTACK_ENDPOINT` があればそれに従う。dual-stack にするのは OIDC だけで、SDK のほかの呼び出し(STS など)は変えない | 2026-11-10 から、IPv4 の `oidc.<region>.amazonaws.com` で認可を始めると、Identity Center が SAML 要求に IPv4 の ACS URL(`<region>.signin.aws/...`)を入れるようになった。Google Workspace の SAML アプリは ACS URL を 1 つしか持てず、dual-stack の `<region>.sso.signin.aws/...` だけを登録しているので、Google が要求を弾き、ブラウザに「サインイン認証情報を確認できませんでした」と出る。それまでは認可がアクセスポータル(`*.app.aws`)を経由していたので通っていた。ポータルに先にサインインしておくと SAML を通らないので通る(11/10 15:02 の成功はこれ)。aws CLI にも同じ報告がある(aws/aws-cli#10507、#10834)。9/16 に device code が弾かれたのも同じ原因(D12)。`*.app.aws` のポータルは dual-stack に移した印で、そのとき IdP も dual-stack の ACS URL に替えている。issuer URL 形式の start URL など URL から分からない場合のために環境変数で上書きできるようにした。SDK 全体に dual-stack を広げると、dual-stack が無いサービスやリージョンで壊れうるので OIDC だけに絞る(2026-11-11) |
 
 ## 5. 却下した案
 
@@ -151,7 +152,7 @@ CLI は成功時だけ JSON を stdout に出し、URL・承認案内は stderr 
 
 AWS_CONFIG_FILE、JSON、非 TTY、status / preflight、PKCE login、MCP、描画の統一は実装済み。
 派生 config 生成は撤回済み(D15)。2026-09-18 のレビューで認証復旧、破損キャッシュ、MCP の並行処理と期限、JSON 出力、TUI の端末幅への対応を修正した。
-同日に D24〜D28 を実装。2026-09-19 に D29〜D31、2026-09-25 に D32〜D34、2026-11-09 に D35、2026-11-10 に D36 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
+同日に D24〜D28 を実装。2026-09-19 に D29〜D31、2026-09-25 に D32〜D34、2026-11-09 に D35、2026-11-10 に D36、2026-11-11 に D37 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
 
 D12 の実 AWS での確認は 2026-09-16 に実施済み: `awsp login <profile>` が書いたキャッシュで `aws sts get-caller-identity --profile <profile>` が成功し、トークンファイルのキーは CLI と同じ 8 個、権限 0600、refreshToken あり。レビュー修正の自動テストでは実 AWS を使わず、OIDC/STS のフェイク、隔離したキャッシュ、localhost のコールバックを使う。
 
