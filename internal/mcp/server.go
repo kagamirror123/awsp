@@ -30,7 +30,10 @@ const noTokenNote = "Never returns SSO token or credential values."
 const serverInstructions = "Each profile in the local AWS config can reach a different AWS account and role. " +
 	"When a task targets an account other than the one you are using, call list_profiles to find a profile for it " +
 	"and run the aws CLI with --profile <name>, instead of concluding the account is unreachable or asking the human " +
-	"to run read-only commands. If the SSO session has expired, call login."
+	"to run read-only commands. If the SSO session has expired, call login. " +
+	"When a profile's role lacks a permission the task needs, `awsp scoped --profile <name> --policy <name|path> " +
+	"--reason <why> -- <command>` runs one command with policy-scoped credentials if the human has set up policies " +
+	"(see `awsp scoped --help`)."
 
 // NewServer は 4 つのツール(auth_status list_profiles whoami login)を登録した MCP サーバーを作る(D1 D2)
 // initialize では利用方針(instructions)も返す(D32)
