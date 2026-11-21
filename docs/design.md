@@ -70,6 +70,7 @@ awsp を「人間がシェルで切り替える手」に加えて、
 | D35 | 別のプロセスのログインを拾う | 承認待ちの間、トークンキャッシュを 2 秒おきに読み直す。待ち始める前と違う有効なトークンが書かれたら、自分の承認を待たずにそれを使って返す。`--force` では読み直さない | D4 の合流は同じプロセスの中だけで、エージェントのセッションごとに `awsp mcp` は別のプロセスになる。2026-10-27 に 2 つのセッションが 1 分半違いで login を呼んでタブが 2 つ開き、作者が後のほうを承認すると、先のセッションは自分のタブの承認だけを待ち続けて 10 分で失敗した。キャッシュは CLI 互換なので、誰が書いたトークンでも SDK / CLI はそのまま使える。読むのは expiresAt と refreshToken の有無だけ(§3)。2 本目のタブを開かないようプロセス間でフローを 1 本にまとめる案は、落ちたプロセスのロックの後始末が増えるわりに、防げるのは承認しないタブが 1 つ残ることだけなので採らない。`--force` は画面や挙動を確かめるためのやり直しなので、ほかの更新で終わらせない(2026-11-09) |
 | D36 | 期限切れ後の login | 期限切れでも refreshToken があれば、login はブラウザを開く前に SDK / CLI と同じ更新(`ssocreds.SSOTokenProvider`)を試し、できたらそのトークンで返す。だめならこれまでどおりブラウザで承認を求める。warning の案内は「使用時に自動更新を試みる」から「login を実行」に変え、MCP の説明でも ok 以外は login を呼ぶよう伝える。Q10 はこれで決定 | 2026-10-14〜10-26 に warning が 5 回出て、5 回とも自動更新に失敗した。エージェントは案内どおり aws を先に叩いて失敗し、それから login を呼んでいた。warning は D18 の推定で、セッション終端はキャッシュに無い(Q12)ので当てにならない。かといって warning で login を呼ばせると、更新できる場面でもブラウザの承認を求めることになり、D23 に反する。login が先に更新を試せば、エージェントには「ok 以外は login」とだけ伝えれば足りる。猶予を超えた error でも refreshToken があれば試す。Identity Center のセッション期間を 8 時間より長くしている組織では更新が効くためで、失敗しても API 1 回分で済む(2026-11-10) |
 | D37 | dual-stack の Identity Center | アクセスポータルの URL が `*.app.aws` なら、OIDC の API と認可 URL の両方を dual-stack のエンドポイント(`oidc.<region>.api.aws`)にする。`AWS_USE_DUALSTACK_ENDPOINT` があればそれに従う。dual-stack にするのは OIDC だけで、SDK のほかの呼び出し(STS など)は変えない | 2026-11-10 から、IPv4 の `oidc.<region>.amazonaws.com` で認可を始めると、Identity Center が SAML 要求に IPv4 の ACS URL(`<region>.signin.aws/...`)を入れるようになった。Google Workspace の SAML アプリは ACS URL を 1 つしか持てず、dual-stack の `<region>.sso.signin.aws/...` だけを登録しているので、Google が要求を弾き、ブラウザに「サインイン認証情報を確認できませんでした」と出る。それまでは認可がアクセスポータル(`*.app.aws`)を経由していたので通っていた。ポータルに先にサインインしておくと SAML を通らないので通る(11/10 15:02 の成功はこれ)。aws CLI にも同じ報告がある(aws/aws-cli#10507、#10834)。9/16 に device code が弾かれたのも同じ原因(D12)。`*.app.aws` のポータルは dual-stack に移した印で、そのとき IdP も dual-stack の ACS URL に替えている。issuer URL 形式の start URL など URL から分からない場合のために環境変数で上書きできるようにした。SDK 全体に dual-stack を広げると、dual-stack が無いサービスやリージョンで壊れうるので OIDC だけに絞る(2026-11-11) |
+| D38 | 絞った認証情報でコマンドを実行する | `awsp scoped --profile <p> --policy <名前\|パス> --reason <用途> -- <コマンド>`。STS の GetScopedCredentials で profile の認証情報にポリシーを重ね、`--` の後ろのコマンドにだけ環境変数で渡す。ポリシーは `~/.config/awsp/policies/<名前>.json` かパスで、中身は利用者が置く(awsp は持たない)。`always.json` があれば必ず 1 層目に重ねる。`{{key}}` は `--set key=value` で置き換え、値は英数字と一部の記号に限る。元の認証情報を取る config は `--source-config` か `AWSP_SCOPED_CONFIG_FILE` で `AWS_CONFIG_FILE` と別にできる。既定の期限は 15 分。`--reason` は必須で CloudTrail の発行イベントに残る(STS が Latin-1 までしか受けないので ASCII に限る)。認証情報は出力しない | エージェントの既定を読み取り専用にしたまま、書き込みが要る 1 コマンドにだけ、絞った権限を渡せる。境界は認証情報そのもので、ツール側の deny ではない(§5 の「書き込み禁止ロジック」とは別)。ポリシーの中身は利用者の環境に依存するので §3 の原則どおり埋め込まない。絞った認証情報は個別に失効できないので短い期限を既定にする | 本セッション(2026-11-21) |
 
 ## 5. 却下した案
 
@@ -124,6 +125,7 @@ CLI は成功時だけ JSON を stdout に出し、URL・承認案内は stderr 
 | profile 一覧 | `awsp list --json` | list_profiles |
 | caller identity | `awsp current --json` / `awsp whoami <profile>` | whoami |
 | コンソールを開く | `awsp console [profile] [url]` | なし(人間向け、D31) |
+| 絞った認証情報で実行 | `awsp scoped ... -- <コマンド>` | なし(instructions で案内、D38) |
 | ログイン | `awsp login [profile]` | login |
 | 切り替え | `awsp <profile>`(zsh / bash / fish の関数、D24) | なし(D11) |
 | MCP 配信 | `awsp mcp` | - |
@@ -152,7 +154,7 @@ CLI は成功時だけ JSON を stdout に出し、URL・承認案内は stderr 
 
 AWS_CONFIG_FILE、JSON、非 TTY、status / preflight、PKCE login、MCP、描画の統一は実装済み。
 派生 config 生成は撤回済み(D15)。2026-09-18 のレビューで認証復旧、破損キャッシュ、MCP の並行処理と期限、JSON 出力、TUI の端末幅への対応を修正した。
-同日に D24〜D28 を実装。2026-09-19 に D29〜D31、2026-09-25 に D32〜D34、2026-11-09 に D35、2026-11-10 に D36、2026-11-11 に D37 を実装。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
+同日に D24〜D28 を実装。2026-09-19 に D29〜D31、2026-09-25 に D32〜D34、2026-11-09 に D35、2026-11-10 に D36、2026-11-11 に D37、2026-11-21 に D38 を実装(D38 は実際のアカウントで、許可・拒否・2 層の重ねと、CloudFormation 経由だけを許す aws:CalledVia の条件が効くことを確認)。bash / zsh の関数は実バイナリで `awsp <profile> --no-login` の反映まで確認した。fish は作者の環境に無く、構文の確認は未実施。
 
 D12 の実 AWS での確認は 2026-09-16 に実施済み: `awsp login <profile>` が書いたキャッシュで `aws sts get-caller-identity --profile <profile>` が成功し、トークンファイルのキーは CLI と同じ 8 個、権限 0600、refreshToken あり。レビュー修正の自動テストでは実 AWS を使わず、OIDC/STS のフェイク、隔離したキャッシュ、localhost のコールバックを使う。
 

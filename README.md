@@ -90,6 +90,7 @@ total=3  current=dev
 | `awsp login [profile]` | ブラウザで承認するだけ。有効なら何もしない |
 | `awsp current` / `awsp whoami [profile]` | caller identity。`whoami` は自動ログインしない |
 | `awsp console [profile] [url]` | その account / role でマネジメントコンソールをブラウザで開く。URL を渡せばそのページを正しいアカウントで開く |
+| `awsp scoped ... -- <コマンド>` | ポリシーで絞った一時認証情報を発行し、そのコマンドにだけ渡して実行する |
 | `awsp list` | 一覧。認証状態つき |
 | `awsp preflight` | 1 行と exit code。フックやスクリプト向け |
 | `awsp mcp` | MCP サーバー(stdio) |

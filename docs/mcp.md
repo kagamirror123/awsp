@@ -82,6 +82,23 @@ sed 's/^sso_role_name *=.*/sso_role_name = ReadOnlyAccess/' ~/.aws/config > ~/.a
 いま読んでいる config は `awsp status` の 2 行目と `--json` の `configFile` に出ます。
 SSO のトークンキャッシュは sso-session 名で決まるので、どちらの config でも同じログインが使えます。
 
+## 読み取り専用のまま、必要なコマンドだけ権限を足す
+
+エージェントに読み取り専用の config を見せていると、デプロイのような書き込みは人間がやることになります。`awsp scoped` を使うと、既定は読み取り専用のまま、エージェントが 1 コマンドにだけ絞った権限を渡せます。
+
+```bash
+# エージェントの環境(Claude Code の settings.json の env など)に足す
+AWSP_SCOPED_CONFIG_FILE=~/.aws/config   # 絞る元は人間用の config の同名 profile
+```
+
+```bash
+awsp scoped --profile prod --policy cfn --set stack=api --reason "deploy api" -- task deploy
+```
+
+エージェントの `aws` コマンドは今までどおり読み取り専用の config を読み、`awsp scoped` を通したコマンドだけが、人間用の profile をポリシーで絞った認証情報で動きます。何を許すかは `~/.config/awsp/policies/` に置くポリシーで決まり、エージェントのクライアントの許可ルールで `awsp scoped` に確認を挟むこともできます。詳しくは [usage.md](./usage.md) の「絞った認証情報でコマンドを実行する」。
+
+これは既定を安全側に倒す仕組みで、同じマシンの人間用 config を読めるエージェントを閉じ込める壁ではありません。
+
 ## セッション開始時のフック
 
 `awsp preflight` は 1 行を返し、失効していれば exit 1 です。SessionStart フックに入れると、失効を作業前にエージェントへ伝えられます。

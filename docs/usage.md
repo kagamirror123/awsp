@@ -13,6 +13,7 @@
 | `awsp whoami [profile]` | caller identity を確認するだけ。自動ログインしない。省略時は `AWS_PROFILE` |
 | `awsp list` | 一覧。認証状態と認証情報取得時刻も見える |
 | `awsp console [profile] [url]` | その profile の account / role でマネジメントコンソールをブラウザで開く。省略時は `AWS_PROFILE` |
+| `awsp scoped ... -- <コマンド>` | ポリシーで絞った一時認証情報を発行し、そのコマンドにだけ渡して実行する |
 
 `awsp de<Tab>` で profile 名を補完できます。`login` と `whoami` の引数も同じです。Homebrew で入れた場合は補完スクリプトが一緒に入ります。手で置く場合は次のように生成します。
 
@@ -86,6 +87,28 @@ $ awsp dev
 | `awsp console --json` | profile / account / role / url を JSON で出す |
 
 SSO を使わない profile(`source_profile` や静的認証情報)では deep link を組めないので、エラーになります。
+
+## 絞った認証情報でコマンドを実行する
+
+`awsp scoped` は、profile の認証情報を STS の GetScopedCredentials でポリシーの範囲に絞り、`--` の後ろのコマンドにだけ環境変数で渡して実行します。権限は元の profile より広がりません。
+
+```bash
+awsp scoped --profile prod --policy query --reason "investigate 5xx" -- aws athena start-query-execution ...
+awsp scoped --profile prod --policy cfn --set stack=api --reason "deploy api" -- task deploy
+```
+
+| 指定 | 意味 |
+|---|---|
+| `--profile` | 絞る元の profile。省略時は `AWS_PROFILE` |
+| `--policy` | `~/.config/awsp/policies/<名前>.json` の名前か、ファイルのパス。複数付けると指定順に重ねる |
+| `--set key=value` | ポリシーの中の `{{key}}` を置き換える。値は英数字と `._/*:@+=,-` だけ |
+| `--reason` | 用途。必須。CloudTrail の GetScopedCredentials のイベントに残る。半角の英数字と記号で書く |
+| `--duration` | 有効期間。既定は 15 分 |
+| `--source-config` | 元の認証情報を取る config。省略時は `AWSP_SCOPED_CONFIG_FILE`、無ければ `AWS_CONFIG_FILE` |
+
+ポリシーは自分で置きます。`~/.config/awsp/policies/always.json` があれば、どの `--policy` より先に必ず重ねます(IAM の操作を外すなど、常に効かせたい制限に使う)。重ねられるのは `always.json` を含めて 3 層まで、1 つのポリシーは詰めた JSON で 2,048 文字までです。2 層以上重ねるときは、前の層が `sts:GetScopedCredentials` を許可している必要があります。
+
+子プロセスからは `AWS_PROFILE` と元の認証情報を取り除きます。コマンドの中で `--profile` を明示すると絞った認証情報は使われません。発行した認証情報は個別に失効できず、期限か元のセッションの失効で切れます。IAM ユーザーの長期キーの profile では使えません。
 
 ## 認証状態とログイン
 

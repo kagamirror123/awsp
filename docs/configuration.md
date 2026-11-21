@@ -40,6 +40,8 @@ source_profile = base
 |---|---|
 | `AWS_CONFIG_FILE` | 読む config。未設定なら `~/.aws/config`。人間と AI で使い分ける方法は [mcp.md](./mcp.md) |
 | `AWS_PROFILE` | `awsp current` と `awsp whoami` の既定の profile。`awsp <profile>` が設定する |
+| `AWSP_SCOPED_CONFIG_FILE` | `awsp scoped` が元の認証情報を取る config。未設定なら `AWS_CONFIG_FILE` と同じ |
+| `XDG_CONFIG_HOME` | `awsp scoped` のポリシーの置き場(`$XDG_CONFIG_HOME/awsp/policies`)。未設定なら `~/.config` |
 | `NO_COLOR` | 装飾を付けない |
 | `COLUMNS` | 非 TTY のときの表の幅(無ければ 120) |
 
@@ -49,6 +51,7 @@ source_profile = base
 |---|---|---|
 | `~/.aws/config` | 読む | profile と sso-session |
 | `~/.aws/sso/cache/<sha1(sso-session 名)>.json` | 読む・書く | 期限と refresh token の有無を読む。ログイン時に aws CLI 互換の形式で書く |
+| `~/.config/awsp/policies/*.json` | 読む | `awsp scoped` が重ねるポリシー |
 | `~/.aws/cli/cache/*.json` | 読む | 一覧の認証情報取得時刻とロール認証情報の期限 |
 
 トークン値・credentials は読み取っても出力せず、ログにも残しません。

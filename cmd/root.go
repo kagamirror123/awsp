@@ -156,6 +156,7 @@ func newRootCmd() *cobra.Command {
 			"  awsp login",
 			"  awsp whoami dev",
 			"  awsp console",
+			"  awsp scoped --profile prod --policy query --reason \"investigate\" -- aws athena ...",
 			"  awsp init zsh",
 			"  awsp init fish",
 		}, "\n"),
@@ -261,6 +262,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newLoginCmd(opts))
 	cmd.AddCommand(newWhoamiCmd())
 	cmd.AddCommand(newConsoleCmd())
+	cmd.AddCommand(newScopedCmd())
 	cmd.AddCommand(newCompletionCmd(cmd))
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newMCPCmd())
